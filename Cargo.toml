@@ -1,20 +1,19 @@
 [package]
-name = "bevy_replicon_example_backend"
-version = "0.34.0"
+name = "bevy_replicon_matchbox_backend"
+version = "0.16.0"
 authors = [
-  "Hennadii Chernyshchyk <genaloner@gmail.com>",
-  "koe <ukoe@protonmail.com>",
+  "rogerkueng@gmail.com",
 ]
 edition = "2024"
-description = "A simple transport intended only for examples"
+description = "A matchbox backend for replicon"
 readme = "README.md"
-repository = "https://github.com/projectharmonia/bevy_replicon"
+repository = "https://github.com/Occuros/bevy_replicon_matchbox.git"
 keywords = [
   "bevy",
   "multiplayer",
-  "netcode",
   "replication",
   "server-authoritative",
+  "replicon"
 ]
 categories = ["game-development", "network-programming"]
 license = "MIT OR Apache-2.0"
@@ -23,7 +22,6 @@ include = ["/src", "../LICENSE*"]
 [dependencies]
 bevy = { version = "0.16.0", default-features = false, features = ["bevy_log"] }
 bevy_replicon = { git="https://github.com/projectharmonia/bevy_replicon.git", version = "0.34.0", default-features = false }
-fastrand = "2.3"
 bevy_matchbox = "0.12.0"
 serde = {version = "1.0.219", features = ["serde_derive"]}
 

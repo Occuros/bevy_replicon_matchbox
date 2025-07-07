@@ -8,7 +8,7 @@ use bevy::{
 };
 use bevy::log::{Level, LogPlugin};
 use bevy_replicon::prelude::*;
-use bevy_replicon_example_backend::{ExampleClient, ExampleServer, RepliconExampleBackendPlugins};
+use bevy_replicon_matchbox_backend::{ExampleClient, ExampleServer, RepliconExampleBackendPlugins};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 

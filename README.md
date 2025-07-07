@@ -1,15 +1,17 @@
-# Bevy Replicon Example Backend
+# Bevy Replicon Matchbox Backend
 
-A simple TCP backend for running examples, testing backend API and serving as a reference for backend implementation.
+Initial experiment to support matchbox with replicon
 
 > [!WARNING]
-> DO NOT USE this in a real project. Instead, choose a proper backend from [Messaging backends](../README.md#messaging-backends).
+> DO NOT USE this in a real project. This is still in early testing
 
 To run an [example](examples) use the following command:
 
 ```bash
-cargo run -p bevy_replicon_example_backend --example <example name>
+cargo run --example <example name> server
+---
+cargo run --example <example name> client
 ```
 
-In all examples, you need to start the server first since connecting via TCP in the Rust standard library is blocking.
-You won't have this issue with a real backend.
+In all examples, you need to have first a matchbox server running on your local machine:
+https://github.com/johanhelsing/matchbox/tree/main/matchbox_server

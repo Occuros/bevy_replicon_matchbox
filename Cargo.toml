@@ -1,0 +1,49 @@
+[package]
+name = "bevy_replicon_example_backend"
+version = "0.34.0"
+authors = [
+  "Hennadii Chernyshchyk <genaloner@gmail.com>",
+  "koe <ukoe@protonmail.com>",
+]
+edition = "2024"
+description = "A simple transport intended only for examples"
+readme = "README.md"
+repository = "https://github.com/projectharmonia/bevy_replicon"
+keywords = [
+  "bevy",
+  "multiplayer",
+  "netcode",
+  "replication",
+  "server-authoritative",
+]
+categories = ["game-development", "network-programming"]
+license = "MIT OR Apache-2.0"
+include = ["/src", "../LICENSE*"]
+
+[dependencies]
+bevy = { version = "0.16.0", default-features = false, features = ["bevy_log"] }
+bevy_replicon = { git="https://github.com/projectharmonia/bevy_replicon.git", version = "0.34.0", default-features = false }
+fastrand = "2.3"
+bevy_matchbox = "0.12.0"
+serde = {version = "1.0.219", features = ["serde_derive"]}
+
+[dev-dependencies]
+bevy = { version = "0.16.0", default-features = false, features = [
+  "bevy_gizmos",
+  "bevy_state",
+  "bevy_text",
+  "bevy_ui_picking_backend",
+  "bevy_ui",
+  "bevy_window",
+  "default_font",
+  "serialize",
+  "x11",
+] }
+test-log = "0.2"
+serde = "1.0"
+clap = { version = "4.1", features = ["derive"] }
+
+[features]
+default = ["client", "server"]
+server = ["bevy_replicon/server"]
+client = ["bevy_replicon/client"]

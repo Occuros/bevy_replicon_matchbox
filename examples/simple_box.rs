@@ -10,7 +10,7 @@ use bevy::{
     winit::{UpdateMode::Continuous, WinitSettings},
 };
 use bevy_replicon::prelude::*;
-use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconExampleBackendPlugins};
+use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconMatchboxBackendPlugins};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +31,7 @@ fn main() {
         .add_plugins((
             DefaultPlugins.set(log_plugin),
             RepliconPlugins,
-            RepliconExampleBackendPlugins,
+            RepliconMatchboxBackendPlugins,
         ))
         .replicate::<BoxPosition>()
         .replicate::<PlayerBox>()

@@ -17,9 +17,9 @@ pub(super) struct OnHostDefinitionTrigger {
 }
 
 /// Adds a server messaging backend made for examples to `bevy_replicon`.
-pub struct RepliconExampleServerPlugin;
+pub struct RepliconMatchboxServerPlugin;
 
-impl Plugin for RepliconExampleServerPlugin {
+impl Plugin for RepliconMatchboxServerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             PreUpdate,

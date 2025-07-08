@@ -8,9 +8,9 @@ use std::io;
 use crate::{create_matchbox_socket};
 
 /// Adds a client messaging backend made for examples to `bevy_replicon`.
-pub struct RepliconExampleClientPlugin;
+pub struct RepliconMatchboxClientPlugin;
 
-impl Plugin for RepliconExampleClientPlugin {
+impl Plugin for RepliconMatchboxClientPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             PreUpdate,

@@ -14,33 +14,32 @@ pub use client::*;
 pub use server::*;
 
 use bevy::{app::PluginGroupBuilder, prelude::*};
-use bevy::window::exit_on_all_closed;
 use bevy_matchbox::MatchboxSocket;
 use bevy_matchbox::matchbox_socket::{ChannelConfig, PeerId};
-use bevy_replicon::prelude::{Channel, RepliconChannels, ServerTriggerAppExt};
+use bevy_replicon::prelude::{Channel, RepliconChannels};
 
 /// Plugin group for all replicon example backend plugins.
 ///
 /// Contains the following:
-/// * [`RepliconExampleServerPlugin`] - with feature `server`.
-/// * [`RepliconExampleClientPlugin`] - with feature `client`.
-pub struct RepliconExampleBackendPlugins;
+/// * [`RepliconMatchboxServerPlugin`] - with feature `server`.
+/// * [`RepliconMatchboxClientPlugin`] - with feature `client`.
+pub struct RepliconMatchboxBackendPlugins;
 
-impl PluginGroup for RepliconExampleBackendPlugins {
+impl PluginGroup for RepliconMatchboxBackendPlugins {
     fn build(self) -> PluginGroupBuilder {
         let mut group = PluginGroupBuilder::start::<Self>();
 
         #[cfg(feature = "server")]
         {
-            group = group.add(RepliconExampleServerPlugin);
+            group = group.add(RepliconMatchboxServerPlugin);
         }
 
         #[cfg(feature = "client")]
         {
-            group = group.add(RepliconExampleClientPlugin);
+            group = group.add(RepliconMatchboxClientPlugin);
         }
 
-        group = group.add(RepliconExampleBackendSharedPlugin);
+        group = group.add(RepliconMatchboxBackendSharedPlugin);
 
         group
     }
@@ -61,9 +60,9 @@ impl<'a> RepliconChannelsExt<'a> for RepliconChannels {
     }
 }
 
-pub struct RepliconExampleBackendSharedPlugin;
+pub struct RepliconMatchboxBackendSharedPlugin;
 
-impl Plugin for RepliconExampleBackendSharedPlugin {
+impl Plugin for RepliconMatchboxBackendSharedPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Last, cleanup_matchbox_socket_on_exit);
     }
@@ -74,8 +73,8 @@ fn cleanup_matchbox_socket_on_exit(
     mut server: Option<ResMut<MatchboxHost>>,
     mut client: Option<ResMut<MatchboxClient>>,
 ) {
+    //seems not to work on all platforms
     for _ in exit_events.read() {
-        debug!("we have app exitting");
         if let Some(client) = &mut client {
             client.matchbox_socket.close();
         }

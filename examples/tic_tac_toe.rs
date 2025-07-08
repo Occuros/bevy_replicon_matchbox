@@ -254,14 +254,14 @@ fn apply_pick(
     players: Query<&Symbol>,
 ) {
     // It's good to check the received data because client could be cheating.
-    if trigger.client != SERVER {
+    if trigger.client_entity != SERVER {
         let symbol = *players
-            .get(trigger.client)
+            .get(trigger.client_entity)
             .expect("all clients should have assigned symbols");
         if symbol != **turn_symbol {
             error!(
                 "`{}` chose cell {} at wrong turn",
-                trigger.client, trigger.index
+                trigger.client_entity, trigger.index
             );
             return;
         }
@@ -270,7 +270,7 @@ fn apply_pick(
     let Some((entity, _)) = cells.iter().find(|(_, cell)| cell.index == trigger.index) else {
         error!(
             "`{}` has chosen occupied or invalid cell {}",
-            trigger.client, trigger.index
+            trigger.client_entity, trigger.index
         );
         return;
     };
@@ -343,11 +343,11 @@ fn init_client(
         // Notify client about the problem. No delivery
         // guarantee since we disconnect after sending.
         commands.server_trigger(ToClients {
-            mode: SendMode::Direct(trigger.client),
+            mode: SendMode::Direct(trigger.client_entity),
             event: ProtocolMismatch,
         });
         events.write(DisconnectRequest {
-            client: trigger.client,
+            client_entity: trigger.client_entity,
         });
     }
 
@@ -366,7 +366,7 @@ fn init_client(
     }
 
     // Utilize client entity as a player for convenient lookups by `client_entity`.
-    commands.entity(trigger.client).insert((
+    commands.entity(trigger.client_entity).insert((
         Player,
         server_symbol.next(),
         AuthorizedClient,
@@ -375,10 +375,10 @@ fn init_client(
 
     commands.server_trigger_targets(
         ToClients {
-            mode: SendMode::Direct(trigger.client),
+            mode: SendMode::Direct(trigger.client_entity),
             event: MakeLocal,
         },
-        trigger.client,
+        trigger.client_entity,
     );
 
     commands.set_state(GameState::InGame);

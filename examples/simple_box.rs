@@ -173,8 +173,8 @@ fn apply_movement(
     // but we didn't implement it for the sake of simplicity.
     let (_, mut position) = boxes
         .iter_mut()
-        .find(|&(owner, _)| **owner == trigger.client)
-        .unwrap_or_else(|| panic!("`{}` should be connected", trigger.client));
+        .find(|&(owner, _)| **owner == trigger.client_entity)
+        .unwrap_or_else(|| panic!("`{}` should be connected", trigger.client_entity));
 
     **position += *trigger.event * time.delta_secs() * MOVE_SPEED;
 }

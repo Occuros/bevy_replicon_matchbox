@@ -26,7 +26,7 @@ impl Plugin for RepliconMatchboxClientPlugin {
             PostUpdate,
             (
                 set_disconnected
-                    .in_set(ClientSet::PrepareSend)
+                    .in_set(ClientSet::Send)
                     .run_if(resource_removed::<MatchboxClient>),
                 send_packets
                     .in_set(ClientSet::SendPackets)

@@ -34,7 +34,7 @@ impl Plugin for RepliconMatchboxServerPlugin {
             PostUpdate,
             (
                 set_stopped
-                    .in_set(ServerSet::PrepareSend)
+                    .in_set(ServerSet::Send)
                     .run_if(resource_removed::<MatchboxHost>),
                 send_packets
                     .in_set(ServerSet::SendPackets)
@@ -142,18 +142,17 @@ fn send_packets(
 fn received_disconnect(
     mut disconnect_events: EventReader<DisconnectRequest>,
     mut commands: Commands,
-
     mut server: ResMut<MatchboxHost>,
 
     client_connections: Query<&MatchboxClientConnection>,
 ) {
     for event in disconnect_events.read() {
-        let Ok(connection) = client_connections.get(event.client) else {
+        let Ok(connection) = client_connections.get(event.client_entity) else {
             continue;
         };
-        debug!("disconnecting client `{}` by request", event.client);
+        debug!("disconnecting client `{}` by request", event.client_entity);
         server.client_entities.remove(&connection.peer_id);
-        commands.entity(event.client).despawn();
+        commands.entity(event.client_entity).despawn();
     }
 }
 

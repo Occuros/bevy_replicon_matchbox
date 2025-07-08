@@ -1,16 +1,11 @@
-use std::{
-    io,
-    net::{Ipv4Addr, SocketAddr, TcpStream},
-    time::Instant,
-};
-use std::ops::Deref;
-use crate::matchbox_package_service::{create_matchbox_socket, create_package, read_package};
-use crate::server::{OnHostDefinitionTrigger, CHANNEL_ID};
+use crate::server::OnHostDefinitionTrigger;
 use bevy::prelude::*;
 use bevy_matchbox::MatchboxSocket;
 use bevy_matchbox::matchbox_socket::PeerId;
-use bevy_replicon::bytes::{BufMut, Bytes, BytesMut};
+use bevy_replicon::bytes::{Bytes};
 use bevy_replicon::prelude::*;
+use std::io;
+use crate::{create_matchbox_socket};
 
 /// Adds a client messaging backend made for examples to `bevy_replicon`.
 pub struct RepliconExampleClientPlugin;
@@ -20,8 +15,8 @@ impl Plugin for RepliconExampleClientPlugin {
         app.add_systems(
             PreUpdate,
             (
-                set_connected.run_if(resource_added::<ExampleClient>),
-                receive_packets.run_if(resource_exists::<ExampleClient>),
+                set_connected.run_if(resource_added::<MatchboxClient>),
+                receive_packets.run_if(resource_exists::<MatchboxClient>),
             )
                 .chain()
                 .in_set(ClientSet::ReceivePackets),
@@ -32,15 +27,14 @@ impl Plugin for RepliconExampleClientPlugin {
             (
                 set_disconnected
                     .in_set(ClientSet::PrepareSend)
-                    .run_if(resource_removed::<ExampleClient>),
+                    .run_if(resource_removed::<MatchboxClient>),
                 send_packets
                     .in_set(ClientSet::SendPackets)
-                    .run_if(resource_exists::<ExampleClient>),
+                    .run_if(resource_exists::<MatchboxClient>),
             ),
         );
 
         app.add_observer(on_connected_to_host);
-
     }
 }
 
@@ -52,59 +46,67 @@ fn set_connected(mut replicon_client: ResMut<RepliconClient>) {
     replicon_client.set_status(RepliconClientStatus::Connected);
 }
 
-fn on_connected_to_host(trigger: Trigger<OnHostDefinitionTrigger>, mut client: ResMut<ExampleClient>) {
+fn on_connected_to_host(
+    trigger: Trigger<OnHostDefinitionTrigger>,
+    mut client: ResMut<MatchboxClient>,
+) {
     info!("connected to host {}", trigger.host_peer_id);
     client.host_peer_id = Some(trigger.host_peer_id);
 }
 
-fn receive_packets(mut client: ResMut<ExampleClient>, mut replicon_client: ResMut<RepliconClient>) {
-    for (id, packet) in client.matchbox_socket.channel_mut(CHANNEL_ID).receive() {
-        if client.host_peer_id.is_none() {
-            client.host_peer_id = Some(id);
+fn receive_packets(
+    mut client: ResMut<MatchboxClient>,
+    mut replicon_client: ResMut<RepliconClient>,
+    channels: Res<RepliconChannels>,
+) {
+    if client.matchbox_socket.any_channel_closed() {
+        error!("matchbox socket closed");
+        return;
+    }
+    for (channel_id, _) in channels.server_channels().iter().enumerate() {
+        let socket_channel_id = channel_id; //server socket channels are the same as the channel id
+        for (id, packet) in client.matchbox_socket.channel_mut(socket_channel_id).receive() {
+            if client.host_peer_id.is_none() {
+                client.host_peer_id = Some(id);
+            }
+            replicon_client.insert_received(channel_id, Bytes::from(packet));
         }
-
-        let Ok((channel_id, message)) = read_package(packet) else {
-            error!("error reading package from {id}");
-            continue;
-        };
-        replicon_client.insert_received(channel_id, message);
     }
 }
-
-struct SendQueueElement {
-    channel_id: usize,
-    message: Bytes,
-}
 fn send_packets(
-    mut client: ResMut<ExampleClient>,
+    mut client: ResMut<MatchboxClient>,
     mut replicon_client: ResMut<RepliconClient>,
+    channels: Res<RepliconChannels>,
 ) {
-    let  Some(host_peer_id) = client.host_peer_id else {
+    if client.matchbox_socket.any_channel_closed() {
+        error!("matchbox socket closed");
+        return;
+    }
+    let Some(host_peer_id) = client.host_peer_id else {
         return;
     };
     for (channel_id, message) in replicon_client.drain_sent() {
-        let Ok(package) = create_package(channel_id, message) else {
-            error!("error creating package");
-            continue;
-        };
+        //client socket channels are offset by the server channel length
+        let socket_channel_id = channels.server_channels().len() + channel_id;
         client
             .matchbox_socket
-            .channel_mut(CHANNEL_ID)
-            .send(package, host_peer_id);
+            .channel_mut(socket_channel_id)
+            .send(message.as_ref().into(), host_peer_id);
     }
 }
 
 #[derive(Resource)]
-pub struct ExampleClient {
+pub struct MatchboxClient {
     pub matchbox_socket: MatchboxSocket,
     pub host_peer_id: Option<PeerId>,
 }
 
-
-
-impl ExampleClient {
-    pub fn new(port: u16) -> io::Result<Self> {
-        let socket = create_matchbox_socket();
+impl MatchboxClient {
+    pub fn new(
+        room_url: impl Into<String>,
+        replicon_channels: &RepliconChannels,
+    ) -> io::Result<Self> {
+        let socket = create_matchbox_socket(room_url, replicon_channels);
         Ok(Self {
             matchbox_socket: socket,
             host_peer_id: None,

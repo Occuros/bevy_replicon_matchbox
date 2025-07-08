@@ -3,21 +3,22 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
+use bevy::log::{Level, LogPlugin};
 use bevy::{
     color::palettes::css::GREEN,
     prelude::*,
     winit::{UpdateMode::Continuous, WinitSettings},
 };
-use bevy::log::{Level, LogPlugin};
 use bevy_replicon::prelude::*;
-use bevy_replicon_matchbox_backend::{ExampleClient, ExampleServer, RepliconExampleBackendPlugins};
+use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconExampleBackendPlugins};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
 fn main() {
     let log_plugin = LogPlugin {
         level: Level::INFO,
-        filter: "bevy_replicon_matchbox=debug,wgpu=error,bevy_matchbox=error,webrtc_ice=error".into(),
+        filter: "bevy_replicon_matchbox=debug,wgpu=error,bevy_matchbox=error,webrtc_ice=error"
+            .into(),
         ..default()
     };
     App::new()
@@ -45,7 +46,9 @@ fn main() {
     println!("Bevy App has exited. We are back in our main function.");
 }
 
-fn read_cli(mut commands: Commands, cli: Res<Cli>) -> Result<()> {
+fn read_cli(mut commands: Commands, cli: Res<Cli>, channels: Res<RepliconChannels>) -> Result<()> {
+    let room_url = "ws://localhost:3536/hello";
+
     match *cli {
         Cli::SinglePlayer => {
             info!("starting single-player game");
@@ -58,7 +61,7 @@ fn read_cli(mut commands: Commands, cli: Res<Cli>) -> Result<()> {
         }
         Cli::Server { port } => {
             info!("starting server at port {port}");
-            let server = ExampleServer::new(port)?;
+            let server = MatchboxHost::new(room_url, &channels)?;
             commands.insert_resource(server);
             commands.spawn((
                 Text::new("Server"),
@@ -77,7 +80,7 @@ fn read_cli(mut commands: Commands, cli: Res<Cli>) -> Result<()> {
         }
         Cli::Client { port } => {
             info!("connecting to port {port}");
-            let client = ExampleClient::new(port)?;
+            let client = MatchboxClient::new(room_url, &channels)?;
             commands.insert_resource(client);
             commands.spawn((
                 Text(format!("Client")),

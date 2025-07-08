@@ -8,7 +8,7 @@ use bevy::{
 };
 use bevy::log::{Level, LogPlugin};
 use bevy_replicon::prelude::*;
-use bevy_replicon_matchbox_backend::{ExampleClient, ExampleServer, RepliconExampleBackendPlugins};
+use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconExampleBackendPlugins};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 
@@ -61,8 +61,8 @@ fn main() {
         .add_systems(
             Update,
             (
-                show_connecting_text.run_if(resource_added::<ExampleClient>),
-                show_waiting_client_text.run_if(resource_added::<ExampleServer>),
+                show_connecting_text.run_if(resource_added::<MatchboxClient>),
+                show_waiting_client_text.run_if(resource_added::<MatchboxHost>),
                 client_start.run_if(client_just_connected),
                 (
                     disconnect_by_server.run_if(client_just_disconnected),
@@ -89,7 +89,9 @@ const LINE_THICKNESS: f32 = 10.0;
 const BUTTON_SIZE: f32 = CELL_SIZE / 1.2;
 const BUTTON_MARGIN: f32 = (CELL_SIZE + LINE_THICKNESS - BUTTON_SIZE) / 2.0;
 
-fn read_cli(mut commands: Commands, cli: Res<Cli>) -> Result<()> {
+fn read_cli(mut commands: Commands, cli: Res<Cli>, replicon_channels: Res<RepliconChannels>) -> Result<()> {
+    let room_url = "ws://localhost:3536/hello";
+
     match *cli {
         Cli::Hotseat => {
             info!("starting hotseat");
@@ -100,13 +102,13 @@ fn read_cli(mut commands: Commands, cli: Res<Cli>) -> Result<()> {
         }
         Cli::Server { port, symbol } => {
             info!("starting server as {symbol} at port {port}");
-            let server = ExampleServer::new(port)?;
+            let server = MatchboxHost::new(room_url, &replicon_channels)?;
             commands.insert_resource(server);
             commands.spawn((LocalPlayer, symbol));
         }
         Cli::Client { port } => {
             info!("connecting to port {port}");
-            let client = ExampleClient::new(port)?;
+            let client = MatchboxClient::new(room_url, &replicon_channels)?;
             commands.insert_resource(client);
         }
     }
@@ -410,8 +412,8 @@ fn disconnect_by_server(mut commands: Commands) {
 
 /// Closes all sockets.
 fn stop_networking(mut commands: Commands) {
-    commands.remove_resource::<ExampleServer>();
-    commands.remove_resource::<ExampleClient>();
+    commands.remove_resource::<MatchboxHost>();
+    commands.remove_resource::<MatchboxClient>();
 }
 
 /// Checks the winner and advances the turn.

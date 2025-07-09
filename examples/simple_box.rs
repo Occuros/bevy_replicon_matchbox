@@ -10,9 +10,17 @@ use bevy::{
     winit::{UpdateMode::Continuous, WinitSettings},
 };
 use bevy_replicon::prelude::*;
-use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconMatchboxBackendPlugins};
+use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconMatchboxPlugins};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
+
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Event, Serialize)]
+struct ExampleEvent {
+    pub i: usize
+}
+
+
 
 fn main() {
     let log_plugin = LogPlugin {
@@ -21,8 +29,8 @@ fn main() {
             .into(),
         ..default()
     };
-    App::new()
-        .init_resource::<Cli>() // Parse CLI before creating window.
+    let mut app =App::new();
+       app .init_resource::<Cli>() // Parse CLI before creating window.
         // Makes the server/client update continuously even while unfocused.
         .insert_resource(WinitSettings {
             focused_mode: Continuous,
@@ -31,7 +39,7 @@ fn main() {
         .add_plugins((
             DefaultPlugins.set(log_plugin),
             RepliconPlugins,
-            RepliconMatchboxBackendPlugins,
+            RepliconMatchboxPlugins,
         ))
         .replicate::<BoxPosition>()
         .replicate::<PlayerBox>()
@@ -40,11 +48,43 @@ fn main() {
         .add_observer(despawn_clients)
         .add_observer(apply_movement)
         .add_systems(Startup, (read_cli, spawn_camera))
-        .add_systems(Update, (read_input, draw_boxes))
-        .run();
+        .add_systems(Update, (read_input, draw_boxes));
+
+
+    // app.add_server_event::<ExampleEvent>(Channel::Ordered)
+    //     .add_systems(
+    //         PreUpdate,
+    //         receive_events
+    //             .after(ClientSet::Receive)
+    //             .run_if(client_connected),
+    //     )
+    //     .add_systems(
+    //         PostUpdate,
+    //         send_events.before(ServerSet::Send).run_if(server_running),
+    //     );
+
+
+
+
+        app.run();
 
     println!("Bevy App has exited. We are back in our main function.");
 }
+
+fn send_events(mut events: EventWriter<ToClients<ExampleEvent>>) {
+    info!("sending event to clients");
+    events.write(ToClients {
+        mode: SendMode::Broadcast,
+        event: ExampleEvent{i: 1},
+    });
+}
+
+fn receive_events(mut events: EventReader<ExampleEvent>) {
+    for event in events.read() {
+        info!("received event {event:?} from server");
+    }
+}
+
 
 fn read_cli(mut commands: Commands, cli: Res<Cli>, channels: Res<RepliconChannels>) -> Result<()> {
     let room_url = "ws://localhost:3536/hello";

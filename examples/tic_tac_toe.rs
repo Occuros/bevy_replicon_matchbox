@@ -8,7 +8,7 @@ use bevy::{
 };
 use bevy::log::{Level, LogPlugin};
 use bevy_replicon::prelude::*;
-use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconMatchboxBackendPlugins};
+use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconMatchboxPlugins};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 
@@ -33,7 +33,7 @@ fn main() {
                 // Customize authorization because we want to exchange cell mappings first.
                 auth_method: AuthMethod::Custom,
             }),
-            RepliconMatchboxBackendPlugins,
+            RepliconMatchboxPlugins,
         ))
         .init_state::<GameState>()
         .init_resource::<SymbolFont>()
@@ -366,12 +366,12 @@ fn init_client(
     }
 
     // Utilize client entity as a player for convenient lookups by `client_entity`.
-    commands.entity(trigger.client_entity).insert((
-        Player,
-        server_symbol.next(),
-        AuthorizedClient,
-        entity_map,
-    ));
+    // commands.entity(trigger.client_entity).insert((
+    //     Player,
+    //     server_symbol.next(),
+    //     AuthorizedClient,
+    //     entity_map,
+    // ));
 
     commands.server_trigger_targets(
         ToClients {

@@ -9,15 +9,18 @@ use bevy_replicon::shared::backend::connected_client::NetworkId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use crate::{create_matchbox_socket,  uuid_to_u64_truncated};
+use crate::{create_matchbox_socket, uuid_to_u64_truncated};
 
 #[derive(Event, Debug, Clone, Serialize, Deserialize)]
 pub(super) struct OnHostDefinitionTrigger {
     pub host_peer_id: PeerId,
 }
 
+#[derive(Event, Debug, Clone, Serialize, Deserialize)]
+pub(super) struct OnDisconnectClient;
+
 /// Adds a server messaging backend made for examples to `bevy_replicon`.
-pub struct RepliconMatchboxServerPlugin;
+pub(super) struct RepliconMatchboxServerPlugin;
 
 impl Plugin for RepliconMatchboxServerPlugin {
     fn build(&self, app: &mut App) {
@@ -26,6 +29,7 @@ impl Plugin for RepliconMatchboxServerPlugin {
             (
                 set_running.run_if(resource_added::<MatchboxHost>),
                 receive_packets.run_if(resource_exists::<MatchboxHost>),
+                received_disconnect.run_if(resource_exists::<MatchboxHost>),
             )
                 .chain()
                 .in_set(ServerSet::ReceivePackets),
@@ -33,23 +37,29 @@ impl Plugin for RepliconMatchboxServerPlugin {
         app.add_systems(
             PostUpdate,
             (
-                set_stopped
-                    .in_set(ServerSet::Send)
-                    .run_if(resource_removed::<MatchboxHost>),
-                send_packets
-                    .in_set(ServerSet::SendPackets)
-                    .run_if(resource_exists::<MatchboxHost>),
                 update_client_presence
                     .in_set(ServerSet::SendPackets)
                     .run_if(resource_exists::<MatchboxHost>),
-                received_disconnect
+                send_packets
                     .in_set(ServerSet::SendPackets)
-                    .run_if(resource_exists::<MatchboxHost>),
+                    .run_if(resource_exists::<MatchboxHost>)
+                    .after(update_client_presence)
+                    .before(received_disconnect),
+
+                set_stopped
+                    .in_set(ServerSet::Send)
+                    .run_if(resource_removed::<MatchboxHost>),
+
+
+
             ),
         );
 
         app.add_server_trigger::<OnHostDefinitionTrigger>(Channel::Ordered);
         app.make_trigger_independent::<OnHostDefinitionTrigger>();
+        app.add_server_trigger::<OnDisconnectClient>(Channel::Ordered);
+        app.make_trigger_independent::<OnDisconnectClient>();
+
     }
 }
 
@@ -69,9 +79,19 @@ fn update_client_presence(mut commands: Commands, mut server: ResMut<MatchboxHos
         return;
     };
 
-    for (peer, state) in server.socket.update_peers() {
+    let Ok(updated_peers) = server.socket.try_update_peers() else {
+        for client_entity in server.client_entities.values() {
+            commands.entity(*client_entity).despawn();
+        }
+        error!("no more peers, shutting down");
+        commands.remove_resource::<MatchboxHost>();
+        return;
+    };
+
+    for (peer, state) in updated_peers {
         match state {
             PeerState::Connected => {
+                info!("peer connected {}", peer);
                 if server.client_entities.contains_key(&peer) {
                     continue;
                 }
@@ -121,6 +141,7 @@ fn receive_packets(
 }
 
 fn send_packets(
+    mut commands: Commands,
     mut replicon_server: ResMut<RepliconServer>,
     mut server: ResMut<MatchboxHost>,
     clients: Query<&MatchboxClientConnection>,
@@ -130,12 +151,24 @@ fn send_packets(
             debug!("client {} not connected", client_entity);
             continue;
         };
-
+        if !server.client_entities.contains_key(&connection.peer_id) {
+            debug!("client {} was disconnected", client_entity);
+            continue;
+        }
         let packet: Packet = message.as_ref().into();
         server
             .socket
             .channel_mut(channel_id)
             .send(packet, connection.peer_id);
+    }
+    let disconnect_ids: Vec<_> = server.clients_to_disconnect.drain(..).collect();
+
+    for peer_id in disconnect_ids {
+        let Some(client_entity) = server.client_entities.remove(&peer_id) else {
+            continue;
+        };
+        info!("disconnecting client `{}`", client_entity);
+        commands.entity(client_entity).despawn();
     }
 }
 
@@ -150,9 +183,12 @@ fn received_disconnect(
         let Ok(connection) = client_connections.get(event.client_entity) else {
             continue;
         };
-        debug!("disconnecting client `{}` by request", event.client_entity);
-        server.client_entities.remove(&connection.peer_id);
-        commands.entity(event.client_entity).despawn();
+        debug!("queuing disconnecting client `{}` by request", event.client_entity);
+        commands.server_trigger(ToClients{
+            mode: SendMode::Direct(event.client_entity),
+            event: OnDisconnectClient
+        });
+        server.clients_to_disconnect.push(connection.peer_id);
     }
 }
 
@@ -161,6 +197,7 @@ fn received_disconnect(
 pub struct MatchboxHost {
     pub socket: MatchboxSocket,
     pub client_entities: HashMap<PeerId, Entity>,
+    pub clients_to_disconnect: Vec<PeerId>,
 }
 
 impl MatchboxHost {
@@ -168,13 +205,18 @@ impl MatchboxHost {
         room_url: impl Into<String>,
         replicon_channels: &RepliconChannels,
     ) -> io::Result<Self> {
-        let reliable_socket = create_matchbox_socket(room_url, replicon_channels);
+        let socket = create_matchbox_socket(room_url, replicon_channels);
 
         Ok(Self {
-            socket: reliable_socket,
+            socket,
             // unreliable_socket,
             client_entities: HashMap::new(),
+            clients_to_disconnect: Vec::new(),
         })
+    }
+
+    pub fn connected_clients(&self) -> usize {
+        self.client_entities.len()
     }
 }
 

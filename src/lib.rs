@@ -23,9 +23,9 @@ use bevy_replicon::prelude::{Channel, RepliconChannels};
 /// Contains the following:
 /// * [`RepliconMatchboxServerPlugin`] - with feature `server`.
 /// * [`RepliconMatchboxClientPlugin`] - with feature `client`.
-pub struct RepliconMatchboxBackendPlugins;
+pub struct RepliconMatchboxPlugins;
 
-impl PluginGroup for RepliconMatchboxBackendPlugins {
+impl PluginGroup for RepliconMatchboxPlugins {
     fn build(self) -> PluginGroupBuilder {
         let mut group = PluginGroupBuilder::start::<Self>();
 
@@ -39,13 +39,13 @@ impl PluginGroup for RepliconMatchboxBackendPlugins {
             group = group.add(RepliconMatchboxClientPlugin);
         }
 
-        group = group.add(RepliconMatchboxBackendSharedPlugin);
+        group = group.add(RepliconMatchboxSharedPlugin);
 
         group
     }
 }
 
-pub trait RepliconChannelsExt<'a> {
+pub(crate) trait RepliconChannelsExt<'a> {
     type Iter: Iterator<Item = &'a Channel>;
 
     fn all_channels(&'a self) -> Self::Iter;
@@ -60,9 +60,9 @@ impl<'a> RepliconChannelsExt<'a> for RepliconChannels {
     }
 }
 
-pub struct RepliconMatchboxBackendSharedPlugin;
+struct RepliconMatchboxSharedPlugin;
 
-impl Plugin for RepliconMatchboxBackendSharedPlugin {
+impl Plugin for RepliconMatchboxSharedPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Last, cleanup_matchbox_socket_on_exit);
     }
@@ -76,9 +76,10 @@ fn cleanup_matchbox_socket_on_exit(
     //seems not to work on all platforms
     for _ in exit_events.read() {
         if let Some(client) = &mut client {
-            client.matchbox_socket.close();
+            client.socket.close();
         }
         if let Some(server) = &mut server {
+            error!("Closing matchbox socket");
             server.socket.close();
             server.client_entities.clear();
         }

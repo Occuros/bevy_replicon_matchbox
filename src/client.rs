@@ -1,11 +1,11 @@
-use crate::server::{OnDisconnectClient, OnHostDefinitionTrigger};
+use crate::{SYSTEM_CHANNEL_ID, add_marker, create_matchbox_socket, strip_marker, SystemChannelMessage, from_packet};
 use bevy::prelude::*;
+use bevy::render::render_resource::encase::private::RuntimeSizedArray;
 use bevy_matchbox::MatchboxSocket;
 use bevy_matchbox::matchbox_socket::PeerId;
-use bevy_replicon::bytes::{Bytes};
 use bevy_replicon::prelude::*;
 use std::io;
-use crate::{create_matchbox_socket};
+use bevy_matchbox::prelude::PeerState;
 
 /// Adds a client messaging backend made for examples to `bevy_replicon`.
 pub(super) struct RepliconMatchboxClientPlugin;
@@ -16,9 +16,9 @@ impl Plugin for RepliconMatchboxClientPlugin {
             PreUpdate,
             (
                 update_peers.run_if(resource_exists::<MatchboxClient>),
-                disconnect_client.run_if(resource_exists::<MatchboxClient>),
-                set_connected.run_if(resource_added::<MatchboxClient>),
                 receive_packets.run_if(resource_exists::<MatchboxClient>),
+                receive_system_channel_packets.run_if(resource_exists::<MatchboxClient>),
+
             )
                 .chain()
                 .in_set(ClientSet::ReceivePackets),
@@ -32,46 +32,74 @@ impl Plugin for RepliconMatchboxClientPlugin {
                     .run_if(resource_removed::<MatchboxClient>),
                 send_packets
                     .in_set(ClientSet::SendPackets)
-                    .run_if(resource_exists::<MatchboxClient>),
+                    .run_if(not(no_host_defined).and(resource_exists::<MatchboxClient>)),
             ),
         );
-
-        app.add_observer(on_connected_to_host);
-        app.add_observer(on_disconnected_by_server);
     }
+}
+
+fn no_host_defined(client: Option<Res<MatchboxClient>>) -> bool {
+    if let Some(client) = client {
+        return client.host_peer_id.is_none();
+    }
+    true
 }
 
 fn set_disconnected(mut replicon_client: ResMut<RepliconClient>) {
     replicon_client.set_status(RepliconClientStatus::Disconnected);
 }
 
-fn set_connected(mut replicon_client: ResMut<RepliconClient>) {
-    replicon_client.set_status(RepliconClientStatus::Connected);
-}
 
 fn update_peers(mut client: ResMut<MatchboxClient>, mut commands: Commands) {
-    if client.socket.try_update_peers().is_err() {
+    info!("updating peers");
+    let Ok(peers) = client.socket.try_update_peers() else {
         commands.remove_resource::<MatchboxClient>();
+        return;
+    };
+
+    let Some(host_peer_id) = client.host_peer_id else {
+        return;
+    };
+    for (peer_id, state) in peers {
+        if matches!(state, PeerState::Disconnected) && peer_id != host_peer_id {
+            info!("host {} disconnected", peer_id);
+            commands.remove_resource::<MatchboxClient>();
+            return;
+        }
     }
 }
 
-fn on_disconnected_by_server(_: Trigger<OnDisconnectClient>, mut client: ResMut<MatchboxClient>) {
-    info!("disconnected by server");
-    client.disconnect();
-}
 
-fn on_connected_to_host(
-    trigger: Trigger<OnHostDefinitionTrigger>,
-    mut client: ResMut<MatchboxClient>,
-) {
-    info!("connected to host {}", trigger.host_peer_id);
-    client.host_peer_id = Some(trigger.host_peer_id);
-}
-
-fn disconnect_client(client: Res<MatchboxClient>, mut commands: Commands) {
+fn receive_system_channel_packets(
+    mut commands: Commands,
+    mut client: ResMut<MatchboxClient>, mut replicon_client: ResMut<RepliconClient>) {
     if client.socket.all_channels_closed() {
-        info!("matchbox socket was closed, removing client");
-        commands.remove_resource::<MatchboxClient>();
+        debug!("matchbox socket was closed");
+        return;
+    }
+    let Ok(channel) = client.socket.get_channel_mut(SYSTEM_CHANNEL_ID) else {
+        error!("system channel not found");
+        return;
+    };
+    for (peer_id, packet) in channel.receive() {
+        let Ok(message )= from_packet(&packet) else {
+            error!("failed to deserialize system message {}", packet.len());
+            continue;
+        };
+        debug!("client received system message {:?} from peer {}",message, peer_id);
+
+        match message {
+            SystemChannelMessage::ConnectedToHost => {
+                client.host_peer_id = Some(peer_id);
+                replicon_client.set_status(RepliconClientStatus::Connected);
+            }
+            SystemChannelMessage::Disconnect => {
+                info!("disconnected by server");
+                commands.remove_resource::<MatchboxClient>();
+            }
+        }
+
+
     }
 }
 
@@ -80,18 +108,30 @@ fn receive_packets(
     mut replicon_client: ResMut<RepliconClient>,
     channels: Res<RepliconChannels>,
 ) {
-    if client.socket.any_channel_closed() {
-        debug!("matchbox socket was closed");
+    if client.socket.all_channels_closed() {
+        error!("matchbox socket was closed");
         return;
     }
+
     for (channel_id, _) in channels.server_channels().iter().enumerate() {
-        let socket_channel_id = channel_id; //server socket channels are the same as the channel id
-        for (id, packet) in client.socket.channel_mut(socket_channel_id).receive() {
-            debug!("client received packet from peer {}", id);
-            replicon_client.insert_received(channel_id, Bytes::from(packet));
+        //server socket channels are the same as the channel id +1 for the system channel
+        let socket_channel_id = 1 + channel_id;
+        let Ok(channel) = client.socket.get_channel_mut(socket_channel_id) else {
+            continue;
+        };
+        for (id, packet) in channel.receive() {
+            debug!(
+                "client received packet from peer {}, c:{} size {}",
+                id,
+                channel_id,
+                packet.len()
+            );
+            replicon_client.insert_received(channel_id, strip_marker(packet.as_ref()));
         }
     }
+
 }
+
 fn send_packets(
     mut client: ResMut<MatchboxClient>,
     mut replicon_client: ResMut<RepliconClient>,
@@ -101,16 +141,18 @@ fn send_packets(
         trace!("matchbox socket was closed");
         return;
     }
+
     let Some(host_peer_id) = client.host_peer_id else {
+        error!("set connected before host was defined");
         return;
     };
     for (channel_id, message) in replicon_client.drain_sent() {
-        //client socket channels are offset by the server channel length
-        let socket_channel_id = channels.server_channels().len() + channel_id;
+        //client socket channels are offset by the server channel length + 1 for the system channel
+        let socket_channel_id = 1 + channels.server_channels().len() + channel_id;
         client
             .socket
             .channel_mut(socket_channel_id)
-            .send(message.as_ref().into(), host_peer_id);
+            .send(add_marker(message.as_ref()), host_peer_id);
     }
 }
 
@@ -133,7 +175,7 @@ impl MatchboxClient {
     }
 
     pub fn is_connected(&self) -> bool {
-        !self.socket.connected_peers().count() > 1
+        self.host_peer_id.is_some()
     }
 
     pub fn disconnect(&mut self) {

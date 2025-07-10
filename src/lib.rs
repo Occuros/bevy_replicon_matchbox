@@ -15,8 +15,22 @@ pub use server::*;
 
 use bevy::{app::PluginGroupBuilder, prelude::*};
 use bevy_matchbox::MatchboxSocket;
-use bevy_matchbox::matchbox_socket::{ChannelConfig, PeerId};
-use bevy_replicon::prelude::{Channel, RepliconChannels};
+use bevy_matchbox::matchbox_socket::{ChannelConfig, Packet, PeerId};
+use bevy_replicon::postcard;
+use bevy_replicon::postcard::to_slice;
+use bevy_replicon::prelude::*;
+use bytes::Bytes;
+use serde::{Deserialize, Serialize};
+
+//Required to communicate which peer is the host before we start using replicon
+const SYSTEM_CHANNEL_ID: usize = 0;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+enum SystemChannelMessage {
+    ConnectedToHost,
+    Disconnect,
+}
+
 
 /// Plugin group for all replicon example backend plugins.
 ///
@@ -91,6 +105,8 @@ fn create_matchbox_socket(
     replicon_channels: &RepliconChannels,
 ) -> MatchboxSocket {
     let mut web_rtc_socket = bevy_matchbox::matchbox_socket::WebRtcSocketBuilder::new(room_url);
+    //add system channel
+    web_rtc_socket = web_rtc_socket.add_reliable_channel();
     for &channel in replicon_channels.all_channels() {
         match channel {
             Channel::Unreliable => {
@@ -114,4 +130,41 @@ fn create_matchbox_socket(
 fn uuid_to_u64_truncated(peer_id: PeerId) -> u64 {
     let bytes = peer_id.0.as_bytes();
     u64::from_le_bytes(bytes[0..8].try_into().unwrap())
+}
+
+///Marker added as matchbox seems to drop 0 sized packages
+fn add_marker(data: &[u8]) -> Packet {
+    let mut payload = Vec::with_capacity(data.len() + 1);
+    payload.push(0);
+    payload.extend_from_slice(data);
+    payload.into()
+}
+
+///Marker stripped as matchbox seems to drop 0 sized packages
+fn strip_marker(packet: &[u8]) -> Bytes {
+    Bytes::copy_from_slice(&packet[1..])
+}
+
+
+
+fn to_packet<'a, T: Serialize>(msg: &T, buf: &'a mut [u8]) -> &'a [u8] {
+    to_slice(msg, buf).expect("serialize failed")
+}
+
+fn from_packet<'a, T: Deserialize<'a>>(data: &'a [u8]) -> Result<T, postcard::Error> {
+    postcard::from_bytes(data)
+}
+
+
+#[test]
+fn test_postcard_enum_roundtrip() {
+    let messages = [SystemChannelMessage::ConnectedToHost, SystemChannelMessage::Disconnect];
+    for msg in messages.iter() {
+        let msg = SystemChannelMessage::ConnectedToHost;
+        let mut buf = [0u8; 1];
+        let p = to_packet(&msg, &mut buf);
+        let deserialized: SystemChannelMessage = from_packet(&*p).unwrap();
+        assert_eq!(msg, deserialized);
+    }
+
 }

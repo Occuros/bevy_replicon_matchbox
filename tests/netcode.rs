@@ -1,44 +1,45 @@
-
-use std::net::{Ipv4Addr, SocketAddrV4};
 use bevy::log::{Level, LogPlugin};
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
+use bevy_replicon_matchbox_backend::*;
 use serde::{Deserialize, Serialize};
+use std::net::{Ipv4Addr, SocketAddrV4};
 use test_log::test;
-use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconMatchboxPlugins};
+
+
+
 
 #[test]
 fn connect_disconnect() {
-        let mut server_app = App::new();
-        let mut client_app = App::new();
-        for app in [&mut server_app, &mut client_app] {
-            app.add_plugins((
-                MinimalPlugins,
-                RepliconPlugins.set(ServerPlugin {
-                    tick_policy: TickPolicy::EveryFrame,
-                    ..Default::default()
-                }),
-                RepliconMatchboxPlugins,
-            ))
-                .finish();
-        }
+    let mut server_app = App::new();
+    let mut client_app = App::new();
+    for app in [&mut server_app, &mut client_app] {
+        app.add_plugins((
+            MinimalPlugins,
+            RepliconPlugins.set(ServerPlugin {
+                tick_policy: TickPolicy::EveryFrame,
+                ..Default::default()
+            }),
+            RepliconMatchboxPlugins,
+        ))
+        .finish();
+    }
 
-        setup(&mut server_app, &mut client_app);
-        assert!(server_app.world().resource::<RepliconServer>().is_running());
+    setup(&mut server_app, &mut client_app);
+    assert!(server_app.world().resource::<RepliconServer>().is_running());
 
-        let matchbox_server = server_app.world().resource::<MatchboxHost>();
-        let connected_clients = matchbox_server.connected_clients();
-        info!("connected clients: {}", connected_clients);
-        assert_eq!(connected_clients, 1, "one client connected expected but got {}", connected_clients);
+    let matchbox_server = server_app.world().resource::<MatchboxHost>();
+    let connected_clients = matchbox_server.connected_clients();
+    info!("connected clients: {}", connected_clients);
+    let client = client_app.world().resource::<MatchboxClient>();
+    info!("client connected: {}", client.is_connected());
+    assert_eq!(
+        connected_clients, 1,
+        "one client connected expected but got {}",
+        connected_clients
+    );
 
-
-
-
-    client_app.world_mut().resource_mut::<MatchboxClient>().disconnect();
-
-    let mut clients = server_app
-        .world_mut()
-        .query::<&ConnectedClient>();
+    let mut clients = server_app.world_mut().query::<&ConnectedClient>();
     assert_eq!(clients.iter(server_app.world()).len(), 1);
 
     let replicon_client = client_app.world().resource::<RepliconClient>();
@@ -63,8 +64,6 @@ fn connect_disconnect() {
 
     let replicon_client = client_app.world().resource::<RepliconClient>();
     assert!(replicon_client.is_disconnected());
-
-
 }
 
 #[test]
@@ -88,22 +87,23 @@ fn disconnect_request() {
             }),
             RepliconMatchboxPlugins,
         ))
-            .add_server_event::<TestEvent>(Channel::Ordered)
-            .make_event_independent::<TestEvent>()
-            .finish();
+        .add_server_event::<TestEvent>(Channel::Ordered)
+        .make_event_independent::<TestEvent>()
+        .replicate::<Transform>()
+        .finish();
     }
 
     setup(&mut server_app, &mut client_app);
 
-    server_app.world_mut().spawn(Replicated);
+    server_app
+        .world_mut()
+        .spawn(Replicated);
     server_app.world_mut().send_event(ToClients {
         mode: SendMode::Broadcast,
-        event: TestEvent {
-            message: "Hello".into(),
-        },
+        event: TestEvent,
     });
 
-    let events = client_app.world().resource::<Events<TestEvent>>();
+
     let mut clients = server_app
         .world_mut()
         .query_filtered::<Entity, With<ConnectedClient>>();
@@ -112,194 +112,254 @@ fn disconnect_request() {
         .world_mut()
         .send_event(DisconnectRequest { client_entity });
 
-
-
     server_app.update();
 
-    let events = client_app.world().resource::<Events<TestEvent>>();
     assert_eq!(clients.iter(server_app.world()).len(), 0);
 
-    server_app.update(); // Requires additional update to let transport process the disconnect.
     client_app.update();
 
     let events = client_app.world().resource::<Events<TestEvent>>();
-
+    info!("events: {:?}", events.len());
     assert!(
-        client_app.world().resource::<MatchboxClient>().is_connected(),
+        client_app
+            .world()
+            .resource::<MatchboxClient>()
+            .is_connected(),
         "matchbox client disconnects only on the next frame"
     );
-
+    server_app.update();
     client_app.update();
-
 
     let client = client_app.world().resource::<RepliconClient>();
     assert!(client.is_disconnected());
 
     let events = client_app.world().resource::<Events<TestEvent>>();
+    info!("events: {:?}", events.len());
     assert_eq!(events.len(), 1, "last event should be received");
 
     let mut replicated = client_app.world_mut().query::<&Replicated>();
-    info!("replicated: {:?}", replicated.iter(client_app.world()).len());
+    info!(
+        "replicated: {:?}",
+        replicated.iter(client_app.world()).len()
+    );
 
-    // assert_eq!(
-    //     replicated.iter(client_app.world()).len(),
-    //     1,
-    //     "last replication should be received"
-    // );
+    assert_eq!(
+        replicated.iter(client_app.world()).len(),
+        1,
+        "last replication should be received"
+    );
 }
-//
-// #[test]
-// fn server_stop() {
-//     let mut server_app = App::new();
-//     let mut client_app = App::new();
-//     for app in [&mut server_app, &mut client_app] {
-//         app.add_plugins((
-//             MinimalPlugins,
-//             RepliconPlugins.set(ServerPlugin {
-//                 tick_policy: TickPolicy::EveryFrame,
-//                 ..Default::default()
-//             }),
-//             RepliconRenetPlugins,
-//         ))
-//             .add_server_event::<TestEvent>(Channel::Ordered)
-//             .finish();
-//     }
-//
-//     setup(&mut server_app, &mut client_app);
-//
-//     server_app.world_mut().spawn(Replicated);
-//     server_app.world_mut().send_event(ToClients {
-//         mode: SendMode::Broadcast,
-//         event: TestEvent,
-//     });
-//
-//     // In renet, it's necessary to explicitly call disconnect before removing
-//     // the server resource to let clients receive a disconnect.
-//     let mut server = server_app.world_mut().resource_mut::<RenetServer>();
-//     server.disconnect_all();
-//
-//     server_app.update();
-//     client_app.update();
-//
-//     let mut clients = server_app.world_mut().query::<&ConnectedClient>();
-//     assert_eq!(clients.iter(server_app.world()).len(), 0);
-//     assert!(
-//         server_app.world().resource::<RepliconServer>().is_running(),
-//         "requires resource removal"
-//     );
-//     assert!(
-//         client_app.world().resource::<RenetClient>().is_connected(),
-//         "renet client disconnects only on the next frame"
-//     );
-//
-//     server_app.world_mut().remove_resource::<RenetServer>();
-//
-//     server_app.update();
-//     client_app.update();
-//
-//     assert!(!server_app.world().resource::<RepliconServer>().is_running());
-//
-//     let client = client_app.world().resource::<RepliconClient>();
-//     assert!(client.is_disconnected());
-//
-//     let events = client_app.world().resource::<Events<TestEvent>>();
-//     assert!(events.is_empty(), "event after stop shouldn't be received");
-//
-//     let mut replicated = client_app.world_mut().query::<&Replicated>();
-//     assert_eq!(
-//         replicated.iter(client_app.world()).len(),
-//         0,
-//         "replication after stop shouldn't be received"
-//     );
-// }
-//
-// #[test]
-// fn replication() {
-//     let mut server_app = App::new();
-//     let mut client_app = App::new();
-//     for app in [&mut server_app, &mut client_app] {
-//         app.add_plugins((
-//             MinimalPlugins,
-//             RepliconPlugins.set(ServerPlugin {
-//                 tick_policy: TickPolicy::EveryFrame,
-//                 ..Default::default()
-//             }),
-//             RepliconRenetPlugins,
-//         ))
-//             .finish();
-//     }
-//
-//     setup(&mut server_app, &mut client_app);
-//
-//     server_app.world_mut().spawn(Replicated);
-//
-//     server_app.update();
-//     client_app.update();
-//
-//     let mut replicated = client_app.world_mut().query::<&Replicated>();
-//     assert_eq!(replicated.iter(client_app.world()).len(), 1);
-// }
-//
-// #[test]
-// fn server_event() {
-//     let mut server_app = App::new();
-//     let mut client_app = App::new();
-//     for app in [&mut server_app, &mut client_app] {
-//         app.add_plugins((
-//             MinimalPlugins,
-//             RepliconPlugins.set(ServerPlugin {
-//                 tick_policy: TickPolicy::EveryFrame,
-//                 ..Default::default()
-//             }),
-//             RepliconRenetPlugins,
-//         ))
-//             .add_server_event::<TestEvent>(Channel::Ordered)
-//             .finish();
-//     }
-//
-//     setup(&mut server_app, &mut client_app);
-//
-//     server_app.world_mut().send_event(ToClients {
-//         mode: SendMode::Broadcast,
-//         event: TestEvent,
-//     });
-//
-//     server_app.update();
-//     client_app.update();
-//
-//     let events = client_app.world().resource::<Events<TestEvent>>();
-//     assert_eq!(events.len(), 1);
-// }
-//
-// #[test]
-// fn client_event() {
-//     let mut server_app = App::new();
-//     let mut client_app = App::new();
-//     for app in [&mut server_app, &mut client_app] {
-//         app.add_plugins((
-//             MinimalPlugins,
-//             RepliconPlugins.set(ServerPlugin {
-//                 tick_policy: TickPolicy::EveryFrame,
-//                 ..Default::default()
-//             }),
-//             RepliconRenetPlugins,
-//         ))
-//             .add_client_event::<TestEvent>(Channel::Ordered)
-//             .finish();
-//     }
-//
-//     setup(&mut server_app, &mut client_app);
-//
-//     client_app.world_mut().send_event(TestEvent);
-//
-//     client_app.update();
-//     server_app.update();
-//
-//     let client_events = server_app
-//         .world()
-//         .resource::<Events<FromClient<TestEvent>>>();
-//     assert_eq!(client_events.len(), 1);
-// }
+
+#[test]
+fn replication_test() {
+    let mut server_app = App::new();
+    let mut client_app = App::new();
+
+    for app in [&mut server_app, &mut client_app] {
+        app.add_plugins((
+            MinimalPlugins,
+            RepliconPlugins.set(ServerPlugin {
+                tick_policy: TickPolicy::EveryFrame,
+                ..Default::default()
+            }),
+            RepliconMatchboxPlugins,
+        ))
+        .add_server_event::<TestEvent>(Channel::Ordered)
+        .make_event_independent::<TestEvent>()
+        .finish();
+    }
+
+    setup(&mut server_app, &mut client_app);
+
+    let mut clients = server_app
+        .world_mut()
+        .query_filtered::<Entity, With<ConnectedClient>>();
+
+    info!("clients: {:?}", clients.iter(server_app.world()).len());
+
+    server_app.world_mut().spawn(Replicated);
+
+    server_app.update();
+    client_app.update();
+    server_app.update();
+    client_app.update();
+
+    let mut replicated = client_app.world_mut().query::<&Replicated>();
+    error!(
+        "replicated: {:?}",
+        replicated.iter(client_app.world()).len()
+    );
+
+    assert_eq!(
+        replicated.iter(client_app.world()).len(),
+        1,
+        "last replication should be received"
+    );
+}
+
+
+#[test]
+fn server_stop() {
+    let mut server_app = App::new();
+    let mut client_app = App::new();
+    for app in [&mut server_app, &mut client_app] {
+        app.add_plugins((
+            MinimalPlugins,
+            RepliconPlugins.set(ServerPlugin {
+                tick_policy: TickPolicy::EveryFrame,
+                ..Default::default()
+            }),
+            RepliconMatchboxPlugins,
+        ))
+            .add_server_event::<TestEvent>(Channel::Ordered)
+            .finish();
+    }
+
+    setup(&mut server_app, &mut client_app);
+    let mut server = server_app.world_mut().resource_mut::<MatchboxHost>();
+    server.disconnect_all();
+
+    server_app.update();
+    client_app.update();
+
+    let mut clients = server_app.world_mut().query::<&ConnectedClient>();
+    assert_eq!(clients.iter(server_app.world()).len(), 0);
+    assert!(
+        server_app.world().resource::<RepliconServer>().is_running(),
+        "requires resource removal"
+    );
+    assert!(
+        client_app.world().resource::<MatchboxClient>().is_connected(),
+        "matchbox client disconnects only on the next frame"
+    );
+
+    server_app.world_mut().remove_resource::<MatchboxHost>();
+
+    server_app.update();
+    client_app.update();
+
+    assert!(!server_app.world().resource::<RepliconServer>().is_running());
+
+
+    let client = client_app.world().resource::<RepliconClient>();
+    assert!(client.is_disconnected());
+
+
+    server_app.world_mut().send_event(ToClients {
+        mode: SendMode::Broadcast,
+        event: TestEvent,
+    });
+    server_app.world_mut().spawn(Replicated);
+
+    server_app.update();
+    client_app.update();
+
+    let events = client_app.world().resource::<Events<TestEvent>>();
+    assert!(events.is_empty(), "event after stop shouldn't be received");
+
+    let mut replicated = client_app.world_mut().query::<&Replicated>();
+    assert_eq!(
+        replicated.iter(client_app.world()).len(),
+        0,
+        "replication after stop shouldn't be received"
+    );
+}
+
+#[test]
+fn replication() {
+    let mut server_app = App::new();
+    let mut client_app = App::new();
+    for app in [&mut server_app, &mut client_app] {
+        app.add_plugins((
+            MinimalPlugins,
+            RepliconPlugins.set(ServerPlugin {
+                tick_policy: TickPolicy::EveryFrame,
+                ..Default::default()
+            }),
+            RepliconMatchboxPlugins,
+        ))
+            .finish();
+    }
+
+    setup(&mut server_app, &mut client_app);
+
+
+    server_app.world_mut().spawn(Replicated);
+
+    //replication appears to require two update cycles to trigger properly
+    server_app.update();
+    client_app.update();
+    client_app.update();
+
+    let mut replicated = client_app.world_mut().query::<&Replicated>();
+    assert_eq!(replicated.iter(client_app.world()).len(), 1);
+}
+
+#[test]
+fn server_event() {
+    let mut server_app = App::new();
+    let mut client_app = App::new();
+    for app in [&mut server_app, &mut client_app] {
+        app.add_plugins((
+            MinimalPlugins,
+            RepliconPlugins.set(ServerPlugin {
+                tick_policy: TickPolicy::EveryFrame,
+                ..Default::default()
+            }),
+            RepliconMatchboxPlugins,
+        ))
+            .add_server_event::<TestEvent>(Channel::Ordered)
+            .finish();
+    }
+
+    setup(&mut server_app, &mut client_app);
+
+    server_app.world_mut().send_event(ToClients {
+        mode: SendMode::Broadcast,
+        event: TestEvent,
+    });
+
+    server_app.update();
+    //again two client updates are required for the events to sync
+    client_app.update();
+    client_app.update();
+
+    let events = client_app.world().resource::<Events<TestEvent>>();
+    assert_eq!(events.len(), 1);
+}
+
+#[test]
+fn client_event() {
+    let mut server_app = App::new();
+    let mut client_app = App::new();
+    for app in [&mut server_app, &mut client_app] {
+        app.add_plugins((
+            MinimalPlugins,
+            RepliconPlugins.set(ServerPlugin {
+                tick_policy: TickPolicy::EveryFrame,
+                ..Default::default()
+            }),
+            RepliconMatchboxPlugins,
+        ))
+            .add_client_event::<TestEvent>(Channel::Ordered)
+            .finish();
+    }
+
+    setup(&mut server_app, &mut client_app);
+
+    client_app.world_mut().send_event(TestEvent);
+
+    client_app.update();
+    server_app.update();
+    client_app.update();
+    server_app.update();
+
+
+    let client_events = server_app
+        .world()
+        .resource::<Events<FromClient<TestEvent>>>();
+    assert_eq!(client_events.len(), 1);
+}
 
 #[cfg(test)]
 const DEFAULT_ROOM: &str = "ws://localhost:7777/TestRoom";
@@ -313,7 +373,8 @@ fn setup(server_app: &mut App, client_app: &mut App) {
     wait_for_connection(server_app, client_app);
 }
 
-use bevy_matchbox::{matchbox_signaling::SignalingServer};
+use bevy_matchbox::matchbox_signaling::SignalingServer;
+
 fn start_signaling_server(server_app: &mut App) {
     info!("Starting signaling server");
     let addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, DEFAULT_PORT);
@@ -335,7 +396,6 @@ fn start_signaling_server(server_app: &mut App) {
     server_app.insert_resource(signaling_server);
 }
 
-
 fn setup_server(app: &mut App) {
     let channels = app.world().resource::<RepliconChannels>();
 
@@ -356,13 +416,11 @@ fn wait_for_connection(server_app: &mut App, client_app: &mut App) {
         server_app.update();
         let host = server_app.world().resource::<MatchboxHost>();
         let client = client_app.world().resource::<MatchboxClient>();
-        if host.connected_clients() > 0 && client.is_connected(){
+        if host.connected_clients() > 0 && client.is_connected() {
             break;
         }
     }
 }
 
 #[derive(Deserialize, Event, Serialize)]
-struct TestEvent {
-    message: String,
-}
+struct TestEvent;

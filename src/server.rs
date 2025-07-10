@@ -1,23 +1,14 @@
+use crate::{add_marker, create_matchbox_socket, strip_marker, to_packet, uuid_to_u64_truncated, SystemChannelMessage, SYSTEM_CHANNEL_ID};
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::io;
 use bevy_matchbox::MatchboxSocket;
-use bevy_matchbox::matchbox_socket::Packet;
 use bevy_matchbox::prelude::{PeerId, PeerState};
-use bevy_replicon::bytes::{Bytes};
 use bevy_replicon::prelude::*;
 use bevy_replicon::shared::backend::connected_client::NetworkId;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fmt::Debug;
-use crate::{create_matchbox_socket, uuid_to_u64_truncated};
 
-#[derive(Event, Debug, Clone, Serialize, Deserialize)]
-pub(super) struct OnHostDefinitionTrigger {
-    pub host_peer_id: PeerId,
-}
+use bevy_matchbox::matchbox_socket::Packet;
 
-#[derive(Event, Debug, Clone, Serialize, Deserialize)]
-pub(super) struct OnDisconnectClient;
 
 /// Adds a server messaging backend made for examples to `bevy_replicon`.
 pub(super) struct RepliconMatchboxServerPlugin;
@@ -45,27 +36,15 @@ impl Plugin for RepliconMatchboxServerPlugin {
                     .run_if(resource_exists::<MatchboxHost>)
                     .after(update_client_presence)
                     .before(received_disconnect),
-
                 set_stopped
                     .in_set(ServerSet::Send)
                     .run_if(resource_removed::<MatchboxHost>),
-
-
-
             ),
         );
-
-        app.add_server_trigger::<OnHostDefinitionTrigger>(Channel::Ordered);
-        app.make_trigger_independent::<OnHostDefinitionTrigger>();
-        app.add_server_trigger::<OnDisconnectClient>(Channel::Ordered);
-        app.make_trigger_independent::<OnDisconnectClient>();
-
     }
 }
 
-fn set_stopped(
-    mut server: ResMut<RepliconServer>,
-) {
+fn set_stopped(mut server: ResMut<RepliconServer>) {
     info!("server stopped");
     server.set_running(false);
 }
@@ -75,15 +54,11 @@ fn set_running(mut server: ResMut<RepliconServer>) {
 }
 
 fn update_client_presence(mut commands: Commands, mut server: ResMut<MatchboxHost>) {
-    let Some(local_peer) = server.socket.id() else {
-        return;
-    };
-
     let Ok(updated_peers) = server.socket.try_update_peers() else {
         for client_entity in server.client_entities.values() {
             commands.entity(*client_entity).despawn();
         }
-        error!("no more peers, shutting down");
+        error!("sockets closed, shutting down");
         commands.remove_resource::<MatchboxHost>();
         return;
     };
@@ -105,12 +80,16 @@ fn update_client_presence(mut commands: Commands, mut server: ResMut<MatchboxHos
                     .id();
                 debug!("new client {:?}: {}", network_id, client_entity);
                 server.client_entities.insert(peer, client_entity);
-                commands.server_trigger(ToClients {
-                    mode: SendMode::Direct(client_entity),
-                    event: OnHostDefinitionTrigger {
-                        host_peer_id: local_peer,
-                    },
-                })
+                let mut buf = [0u8; 1];
+                let packet: Packet = to_packet(&SystemChannelMessage::ConnectedToHost, &mut buf).into();
+                server.socket.channel_mut(SYSTEM_CHANNEL_ID).send(packet, peer);
+
+                // commands.server_trigger(ToClients {
+                //     mode: SendMode::Direct(client_entity),
+                //     event: OnHostDefinitionTrigger {
+                //         host_peer_id: local_peer,
+                //     },
+                // })
             }
             PeerState::Disconnected => {
                 let Some(client_entity) = server.client_entities.remove(&peer) else {
@@ -128,16 +107,15 @@ fn receive_packets(
     channels: Res<RepliconChannels>,
 ) {
     for (channel_id, _) in channels.client_channels().iter().enumerate() {
-        let socket_channel_id = channels.server_channels().len() + channel_id;
+        let socket_channel_id = 1 + channels.server_channels().len() + channel_id;
         for (id, packet) in server.socket.channel_mut(socket_channel_id).receive() {
             let Some(client_entity) = server.client_entities.get(&id) else {
+                error!("received packet from unknown client {}", id);
                 continue;
             };
-
-            replicon_server.insert_received(*client_entity, channel_id, Bytes::from(packet));
+            replicon_server.insert_received(*client_entity, channel_id, strip_marker(&packet));
         }
     }
-
 }
 
 fn send_packets(
@@ -155,11 +133,17 @@ fn send_packets(
             debug!("client {} was disconnected", client_entity);
             continue;
         }
-        let packet: Packet = message.as_ref().into();
+        debug!(
+            "sending packet to client {}: c:{} - {:?}",
+            client_entity,
+            channel_id,
+            add_marker(message.as_ref()).len()
+        );
+        let socket_channel_id = 1 + channel_id;
         server
             .socket
-            .channel_mut(channel_id)
-            .send(packet, connection.peer_id);
+            .channel_mut(socket_channel_id)
+            .send(add_marker(message.as_ref()), connection.peer_id);
     }
     let disconnect_ids: Vec<_> = server.clients_to_disconnect.drain(..).collect();
 
@@ -167,27 +151,29 @@ fn send_packets(
         let Some(client_entity) = server.client_entities.remove(&peer_id) else {
             continue;
         };
+        let mut buf = [0u8; 1];
+        let packet: Packet = to_packet(&SystemChannelMessage::Disconnect, &mut buf).into();
+        server.socket.channel_mut(SYSTEM_CHANNEL_ID).send(packet, peer_id);
         info!("disconnecting client `{}`", client_entity);
         commands.entity(client_entity).despawn();
     }
 }
 
+
+
 fn received_disconnect(
     mut disconnect_events: EventReader<DisconnectRequest>,
-    mut commands: Commands,
     mut server: ResMut<MatchboxHost>,
-
     client_connections: Query<&MatchboxClientConnection>,
 ) {
     for event in disconnect_events.read() {
         let Ok(connection) = client_connections.get(event.client_entity) else {
             continue;
         };
-        debug!("queuing disconnecting client `{}` by request", event.client_entity);
-        commands.server_trigger(ToClients{
-            mode: SendMode::Direct(event.client_entity),
-            event: OnDisconnectClient
-        });
+        debug!(
+            "queuing disconnecting client `{}` by request",
+            event.client_entity
+        );
         server.clients_to_disconnect.push(connection.peer_id);
     }
 }
@@ -217,6 +203,10 @@ impl MatchboxHost {
 
     pub fn connected_clients(&self) -> usize {
         self.client_entities.len()
+    }
+
+    pub fn disconnect_all(&mut self) {
+        self.clients_to_disconnect.extend(self.client_entities.keys().cloned());
     }
 }
 

@@ -1,7 +1,4 @@
-use crate::{
-    SYSTEM_CHANNEL_ID, SystemChannelMessage, add_marker, create_matchbox_socket, strip_marker,
-    to_packet, uuid_to_u64_truncated,
-};
+use crate::shared::*;
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::io;
 use bevy_matchbox::MatchboxSocket;
@@ -12,7 +9,7 @@ use std::collections::HashMap;
 
 use bevy_matchbox::matchbox_socket::Packet;
 
-pub(super) struct RepliconMatchboxServerPlugin;
+pub struct RepliconMatchboxServerPlugin;
 
 impl Plugin for RepliconMatchboxServerPlugin {
     fn build(&self, app: &mut App) {

@@ -1,7 +1,4 @@
-use crate::{
-    SYSTEM_CHANNEL_ID, SystemChannelMessage, add_marker, create_matchbox_socket, from_packet,
-    strip_marker,
-};
+use crate::shared::*;
 use bevy::prelude::*;
 use bevy_matchbox::MatchboxSocket;
 use bevy_matchbox::matchbox_socket::PeerId;
@@ -10,7 +7,7 @@ use bevy_replicon::prelude::*;
 use std::io;
 
 /// Adds a client messaging backend made for examples to `bevy_replicon`.
-pub(super) struct RepliconMatchboxClientPlugin;
+pub struct RepliconMatchboxClientPlugin;
 
 impl Plugin for RepliconMatchboxClientPlugin {
     fn build(&self, app: &mut App) {

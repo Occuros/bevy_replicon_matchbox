@@ -91,7 +91,7 @@ fn read_cli(mut commands: Commands, cli: Res<Cli>, channels: Res<RepliconChannel
             let client = MatchboxClient::new(room_url, &channels)?;
             commands.insert_resource(client);
             commands.spawn((
-                Text(format!("Client")),
+                Text("Client".to_string()),
                 TextFont {
                     font_size: 30.0,
                     ..default()

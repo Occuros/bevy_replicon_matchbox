@@ -11,7 +11,7 @@ use bevy::{
 };
 use bevy_matchbox::matchbox_signaling::SignalingServer;
 use bevy_replicon::prelude::*;
-use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconMatchboxPlugins};
+use bevy_replicon_matchbox::{MatchboxClient, MatchboxHost, RepliconMatchboxPlugins};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 

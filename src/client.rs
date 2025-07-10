@@ -1,6 +1,5 @@
 use crate::{SYSTEM_CHANNEL_ID, add_marker, create_matchbox_socket, strip_marker, SystemChannelMessage, from_packet};
 use bevy::prelude::*;
-use bevy::render::render_resource::encase::private::RuntimeSizedArray;
 use bevy_matchbox::MatchboxSocket;
 use bevy_matchbox::matchbox_socket::PeerId;
 use bevy_replicon::prelude::*;

@@ -1,13 +1,13 @@
 [package]
-name = "bevy_replicon_matchbox_backend"
+name = "bevy_replicon_matchbox"
 version = "0.16.0"
 authors = [
-  "rogerkueng@gmail.com",
+  "Roger Kueng <rogerkueng@gmail.com>",
 ]
 edition = "2024"
-description = "A matchbox backend for replicon"
+description = "A matchbox backend for replicon, built for Bevy"
 readme = "README.md"
-repository = "https://github.com/Occuros/bevy_replicon_matchbox.git"
+repository = "https://github.com/occuros/bevy_replicon_matchbox.git"
 keywords = [
   "bevy",
   "multiplayer",
@@ -17,7 +17,8 @@ keywords = [
 ]
 categories = ["game-development", "network-programming"]
 license = "MIT OR Apache-2.0"
-include = ["/src", "../LICENSE*"]
+include = ["/src", "/tests", "/examples", "LICENSE*"]
+
 
 [dependencies]
 bevy = { version = "0.16.0", default-features = false, features = ["bevy_log"] }

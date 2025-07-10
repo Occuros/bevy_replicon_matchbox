@@ -1,7 +1,7 @@
 use bevy::log::{Level, LogPlugin};
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
-use bevy_replicon_matchbox_backend::*;
+use bevy_replicon_matchbox::*;
 use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::sync::atomic::{AtomicU16, Ordering};

@@ -15,9 +15,9 @@ impl Plugin for RepliconMatchboxClientPlugin {
         app.add_systems(
             PreUpdate,
             (
-                update_peers.run_if(resource_exists::<MatchboxClient>),
                 receive_packets.run_if(resource_exists::<MatchboxClient>),
                 receive_system_channel_packets.run_if(resource_exists::<MatchboxClient>),
+                update_peers.run_if(resource_exists::<MatchboxClient>),
 
             )
                 .chain()
@@ -51,7 +51,6 @@ fn set_disconnected(mut replicon_client: ResMut<RepliconClient>) {
 
 
 fn update_peers(mut client: ResMut<MatchboxClient>, mut commands: Commands) {
-    info!("updating peers");
     let Ok(peers) = client.socket.try_update_peers() else {
         commands.remove_resource::<MatchboxClient>();
         return;
@@ -62,7 +61,7 @@ fn update_peers(mut client: ResMut<MatchboxClient>, mut commands: Commands) {
     };
     for (peer_id, state) in peers {
         if matches!(state, PeerState::Disconnected) && peer_id != host_peer_id {
-            info!("host {} disconnected", peer_id);
+            trace!("host {} disconnected", peer_id);
             commands.remove_resource::<MatchboxClient>();
             return;
         }
@@ -74,11 +73,11 @@ fn receive_system_channel_packets(
     mut commands: Commands,
     mut client: ResMut<MatchboxClient>, mut replicon_client: ResMut<RepliconClient>) {
     if client.socket.all_channels_closed() {
-        debug!("matchbox socket was closed");
+        trace!("matchbox socket was closed");
         return;
     }
     let Ok(channel) = client.socket.get_channel_mut(SYSTEM_CHANNEL_ID) else {
-        error!("system channel not found");
+        error!("system channel not found!");
         return;
     };
     for (peer_id, packet) in channel.receive() {
@@ -86,7 +85,7 @@ fn receive_system_channel_packets(
             error!("failed to deserialize system message {}", packet.len());
             continue;
         };
-        debug!("client received system message {:?} from peer {}",message, peer_id);
+        trace!("client received system message {:?} from peer {}",message, peer_id);
 
         match message {
             SystemChannelMessage::ConnectedToHost => {
@@ -109,7 +108,7 @@ fn receive_packets(
     channels: Res<RepliconChannels>,
 ) {
     if client.socket.all_channels_closed() {
-        error!("matchbox socket was closed");
+        trace!("matchbox socket was closed");
         return;
     }
 
@@ -120,7 +119,7 @@ fn receive_packets(
             continue;
         };
         for (id, packet) in channel.receive() {
-            debug!(
+            trace!(
                 "client received packet from peer {}, c:{} size {}",
                 id,
                 channel_id,

@@ -157,7 +157,7 @@ fn from_packet<'a, T: Deserialize<'a>>(data: &'a [u8]) -> Result<T, postcard::Er
 
 
 #[test]
-fn test_postcard_enum_roundtrip() {
+fn test_packaging() {
     let messages = [SystemChannelMessage::ConnectedToHost, SystemChannelMessage::Disconnect];
     for msg in messages.iter() {
         let msg = SystemChannelMessage::ConnectedToHost;

@@ -7,7 +7,7 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use std::sync::atomic::{AtomicU16, Ordering};
 use test_log::test;
 
-///run the tests with cargo test -- --test-threads=1
+//run the tests with cargo test -- --test-threads=1
 
 static PORT_COUNTER: AtomicU16 = AtomicU16::new(30000);
 fn next_test_port() -> u16 {
@@ -41,8 +41,7 @@ fn connect_disconnect() {
     info!("client connected: {}", client.is_connected());
     assert_eq!(
         connected_clients, 1,
-        "one client connected expected but got {}",
-        connected_clients
+        "one client connected expected but got {connected_clients}",
     );
 
     let mut clients = server_app.world_mut().query::<&ConnectedClient>();
@@ -375,10 +374,6 @@ fn client_event() {
     assert_eq!(client_events.len(), 1);
 }
 
-#[cfg(test)]
-const DEFAULT_ROOM: &str = "ws://localhost:7777/TestRoom";
-#[cfg(test)]
-const DEFAULT_PORT: u16 = 7777;
 
 fn setup(server_app: &mut App, client_app: &mut App, port: u16) {
     start_signaling_server(server_app, port);

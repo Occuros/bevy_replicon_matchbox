@@ -156,7 +156,7 @@ fn test_packaging() {
     for msg in messages.iter() {
         let mut buf = [0u8; 1];
         let p = to_packet(&msg, &mut buf);
-        let deserialized: SystemChannelMessage = from_packet(&*p).unwrap();
+        let deserialized: SystemChannelMessage = from_packet(p).unwrap();
         assert_eq!(*msg, deserialized);
     }
 }

@@ -1,8 +1,3 @@
-//! A simple transport intended only for examples.
-//! This transport does not implement any reliability or security features.
-//! DO NOT USE in a real project
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
-
 #[cfg(feature = "client")]
 mod client;
 #[cfg(feature = "server")]
@@ -30,7 +25,6 @@ enum SystemChannelMessage {
     ConnectedToHost,
     Disconnect,
 }
-
 
 /// Plugin group for all replicon example backend plugins.
 ///
@@ -145,8 +139,6 @@ fn strip_marker(packet: &[u8]) -> Bytes {
     Bytes::copy_from_slice(&packet[1..])
 }
 
-
-
 fn to_packet<'a, T: Serialize>(msg: &T, buf: &'a mut [u8]) -> &'a [u8] {
     to_slice(msg, buf).expect("serialize failed")
 }
@@ -155,16 +147,16 @@ fn from_packet<'a, T: Deserialize<'a>>(data: &'a [u8]) -> Result<T, postcard::Er
     postcard::from_bytes(data)
 }
 
-
 #[test]
 fn test_packaging() {
-    let messages = [SystemChannelMessage::ConnectedToHost, SystemChannelMessage::Disconnect];
+    let messages = [
+        SystemChannelMessage::ConnectedToHost,
+        SystemChannelMessage::Disconnect,
+    ];
     for msg in messages.iter() {
-        let msg = SystemChannelMessage::ConnectedToHost;
         let mut buf = [0u8; 1];
         let p = to_packet(&msg, &mut buf);
         let deserialized: SystemChannelMessage = from_packet(&*p).unwrap();
-        assert_eq!(msg, deserialized);
+        assert_eq!(*msg, deserialized);
     }
-
 }

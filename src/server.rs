@@ -10,7 +10,6 @@ use std::collections::HashMap;
 use bevy_matchbox::matchbox_socket::Packet;
 
 
-/// Adds a server messaging backend made for examples to `bevy_replicon`.
 pub(super) struct RepliconMatchboxServerPlugin;
 
 impl Plugin for RepliconMatchboxServerPlugin {

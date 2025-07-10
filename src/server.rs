@@ -1,4 +1,7 @@
-use crate::{add_marker, create_matchbox_socket, strip_marker, to_packet, uuid_to_u64_truncated, SystemChannelMessage, SYSTEM_CHANNEL_ID};
+use crate::{
+    SYSTEM_CHANNEL_ID, SystemChannelMessage, add_marker, create_matchbox_socket, strip_marker,
+    to_packet, uuid_to_u64_truncated,
+};
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::io;
 use bevy_matchbox::MatchboxSocket;
@@ -8,7 +11,6 @@ use bevy_replicon::shared::backend::connected_client::NetworkId;
 use std::collections::HashMap;
 
 use bevy_matchbox::matchbox_socket::Packet;
-
 
 pub(super) struct RepliconMatchboxServerPlugin;
 
@@ -76,12 +78,18 @@ fn update_client_presence(mut commands: Commands, mut server: ResMut<MatchboxHos
                         MatchboxClientConnection { peer_id: peer },
                     ))
                     .id();
-                trace!("new client peer: {}, network_id: {:?} entity: {}", peer, network_id, client_entity);
+                trace!(
+                    "new client peer: {}, network_id: {:?} entity: {}",
+                    peer, network_id, client_entity
+                );
                 server.client_entities.insert(peer, client_entity);
                 let mut buf = [0u8; 1];
-                let packet: Packet = to_packet(&SystemChannelMessage::ConnectedToHost, &mut buf).into();
-                server.socket.channel_mut(SYSTEM_CHANNEL_ID).send(packet, peer);
-
+                let packet: Packet =
+                    to_packet(&SystemChannelMessage::ConnectedToHost, &mut buf).into();
+                server
+                    .socket
+                    .channel_mut(SYSTEM_CHANNEL_ID)
+                    .send(packet, peer);
             }
             PeerState::Disconnected => {
                 let Some(client_entity) = server.client_entities.remove(&peer) else {
@@ -145,13 +153,14 @@ fn send_packets(
         };
         let mut buf = [0u8; 1];
         let packet: Packet = to_packet(&SystemChannelMessage::Disconnect, &mut buf).into();
-        server.socket.channel_mut(SYSTEM_CHANNEL_ID).send(packet, peer_id);
+        server
+            .socket
+            .channel_mut(SYSTEM_CHANNEL_ID)
+            .send(packet, peer_id);
         trace!("disconnecting client `{}`", client_entity);
         commands.entity(client_entity).despawn();
     }
 }
-
-
 
 fn received_disconnect(
     mut disconnect_events: EventReader<DisconnectRequest>,
@@ -198,7 +207,8 @@ impl MatchboxHost {
     }
 
     pub fn disconnect_all(&mut self) {
-        self.clients_to_disconnect.extend(self.client_entities.keys().cloned());
+        self.clients_to_disconnect
+            .extend(self.client_entities.keys().cloned());
     }
 }
 

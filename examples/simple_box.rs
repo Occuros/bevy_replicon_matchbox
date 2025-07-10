@@ -1,8 +1,6 @@
 //! A simple demo to showcase how player could send inputs to move a box and server replicates position back.
 //! Also demonstrates the single-player and how sever also could be a player.
 
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::net::{Ipv4Addr, SocketAddrV4};
 use bevy::log::{Level, LogPlugin};
 use bevy::{
     color::palettes::css::GREEN,
@@ -14,14 +12,13 @@ use bevy_replicon::prelude::*;
 use bevy_replicon_matchbox::{MatchboxClient, MatchboxHost, RepliconMatchboxPlugins};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
-
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::net::{Ipv4Addr, SocketAddrV4};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Event, Serialize)]
 struct ExampleEvent {
-    pub i: usize
+    pub i: usize,
 }
-
-
 
 fn main() {
     let log_plugin = LogPlugin {
@@ -30,8 +27,8 @@ fn main() {
             .into(),
         ..default()
     };
-    let mut app =App::new();
-       app .init_resource::<Cli>() // Parse CLI before creating window.
+    let mut app = App::new();
+    app.init_resource::<Cli>() // Parse CLI before creating window.
         // Makes the server/client update continuously even while unfocused.
         .insert_resource(WinitSettings {
             focused_mode: Continuous,
@@ -51,14 +48,10 @@ fn main() {
         .add_systems(Startup, (read_cli, spawn_camera))
         .add_systems(Update, (read_input, draw_boxes));
 
-        app.run();
+    app.run();
 }
 
-
-
-
 fn read_cli(mut commands: Commands, cli: Res<Cli>, channels: Res<RepliconChannels>) -> Result<()> {
-
     match *cli {
         Cli::SinglePlayer => {
             info!("starting single-player game");

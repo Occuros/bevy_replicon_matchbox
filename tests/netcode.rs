@@ -59,7 +59,10 @@ fn connect_disconnect() {
     client_app.update();
     server_app.update();
 
-    info!("connected clients: {}", clients.iter(server_app.world()).len());
+    info!(
+        "connected clients: {}",
+        clients.iter(server_app.world()).len()
+    );
 
     assert_eq!(clients.iter(server_app.world()).len(), 0);
 
@@ -103,14 +106,11 @@ fn disconnect_request() {
 
     setup(&mut server_app, &mut client_app, port);
 
-    server_app
-        .world_mut()
-        .spawn(Replicated);
+    server_app.world_mut().spawn(Replicated);
     server_app.world_mut().send_event(ToClients {
         mode: SendMode::Broadcast,
         event: TestEvent,
     });
-
 
     let mut clients = server_app
         .world_mut()
@@ -207,7 +207,6 @@ fn replication_test() {
     );
 }
 
-
 #[test]
 fn server_stop() {
     let port = next_test_port();
@@ -223,8 +222,8 @@ fn server_stop() {
             }),
             RepliconMatchboxPlugins,
         ))
-            .add_server_event::<TestEvent>(Channel::Ordered)
-            .finish();
+        .add_server_event::<TestEvent>(Channel::Ordered)
+        .finish();
     }
 
     setup(&mut server_app, &mut client_app, port);
@@ -241,7 +240,10 @@ fn server_stop() {
         "requires resource removal"
     );
     assert!(
-        client_app.world().resource::<MatchboxClient>().is_connected(),
+        client_app
+            .world()
+            .resource::<MatchboxClient>()
+            .is_connected(),
         "matchbox client disconnects only on the next frame"
     );
 
@@ -252,10 +254,8 @@ fn server_stop() {
 
     assert!(!server_app.world().resource::<RepliconServer>().is_running());
 
-
     let client = client_app.world().resource::<RepliconClient>();
     assert!(client.is_disconnected());
-
 
     server_app.world_mut().send_event(ToClients {
         mode: SendMode::Broadcast,
@@ -291,11 +291,10 @@ fn replication() {
             }),
             RepliconMatchboxPlugins,
         ))
-            .finish();
+        .finish();
     }
 
     setup(&mut server_app, &mut client_app, port);
-
 
     server_app.world_mut().spawn(Replicated);
 
@@ -322,8 +321,8 @@ fn server_event() {
             }),
             RepliconMatchboxPlugins,
         ))
-            .add_server_event::<TestEvent>(Channel::Ordered)
-            .finish();
+        .add_server_event::<TestEvent>(Channel::Ordered)
+        .finish();
     }
 
     setup(&mut server_app, &mut client_app, port);
@@ -357,8 +356,8 @@ fn client_event() {
             }),
             RepliconMatchboxPlugins,
         ))
-            .add_client_event::<TestEvent>(Channel::Ordered)
-            .finish();
+        .add_client_event::<TestEvent>(Channel::Ordered)
+        .finish();
     }
 
     setup(&mut server_app, &mut client_app, port);
@@ -369,7 +368,6 @@ fn client_event() {
     server_app.update();
     client_app.update();
     server_app.update();
-
 
     let client_events = server_app
         .world()

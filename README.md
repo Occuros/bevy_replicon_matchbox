@@ -1,6 +1,6 @@
 # Bevy Replicon Matchbox
 
-This crate integrates [`matchbox`](https://github.com/johanhelsing/matchbox) as a backend for [`bevy_replicon`](https://github.com/komora-io/bevy_replicon), enabling peer-to-peer networking via WebRTC, STUN, and ICE.
+This crate integrates [`matchbox`](https://github.com/johanhelsing/matchbox) as a backend for [`bevy_replicon`](https://github.com/komora-io/bevy_replicon), enabling multiplayer experiences which only need a signaling server to work.
 
 Matchbox provides convenient NAT traversal support out of the box — no need to manually manage signaling, host discovery, or ICE negotiation.
 

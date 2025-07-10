@@ -1,25 +1,26 @@
 //! Run it with `cargo run --example tic_tac_toe -- hotseat` to play locally or with `-- client` / `-- server`
 
-use std::fmt::{self, Formatter};
-
+use bevy::log::{Level, LogPlugin};
 use bevy::{
     ecs::{relationship::RelatedSpawner, spawn::SpawnWith},
     prelude::*,
 };
-use bevy::log::{Level, LogPlugin};
+use bevy_matchbox::matchbox_signaling::SignalingServer;
 use bevy_replicon::prelude::*;
 use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconMatchboxPlugins};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Formatter};
+use std::net::{Ipv4Addr, SocketAddrV4};
 
 fn main() {
     let log_plugin = LogPlugin {
         level: Level::INFO,
-        filter: "bevy_replicon_matchbox=debug,wgpu=error,bevy_matchbox=error,webrtc_ice=error,webrtc=error".into(),
+        filter: "bevy_replicon_matchbox=trace,wgpu=error,bevy_matchbox=error,webrtc_ice=error,webrtc=error".into(),
         ..default()
     };
-    App::new()
-        .init_resource::<Cli>() // Parse CLI before creating window.
+    let mut app = App::new();
+    app.init_resource::<Cli>() // Parse CLI before creating window.
         .add_plugins((
             DefaultPlugins.build().set(log_plugin).set(WindowPlugin {
                 primary_window: Some(Window {
@@ -71,8 +72,9 @@ fn main() {
                 )
                     .run_if(in_state(GameState::InGame)),
             ),
-        )
-        .run();
+        );
+
+    app.run();
 }
 
 const GRID_SIZE: usize = 3;
@@ -89,9 +91,11 @@ const LINE_THICKNESS: f32 = 10.0;
 const BUTTON_SIZE: f32 = CELL_SIZE / 1.2;
 const BUTTON_MARGIN: f32 = (CELL_SIZE + LINE_THICKNESS - BUTTON_SIZE) / 2.0;
 
-fn read_cli(mut commands: Commands, cli: Res<Cli>, replicon_channels: Res<RepliconChannels>) -> Result<()> {
-    let room_url = "ws://localhost:3536/hello";
-
+fn read_cli(
+    mut commands: Commands,
+    cli: Res<Cli>,
+    replicon_channels: Res<RepliconChannels>,
+) -> Result<()> {
     match *cli {
         Cli::Hotseat => {
             info!("starting hotseat");
@@ -101,12 +105,17 @@ fn read_cli(mut commands: Commands, cli: Res<Cli>, replicon_channels: Res<Replic
             commands.set_state(GameState::InGame);
         }
         Cli::Server { port, symbol } => {
-            info!("starting server as {symbol} at port {port}");
+            info!("starting signaling server at port {port} ");
+            let room_url = format!("ws://localhost:{port}/tic-tac-toe");
+            start_signaling_server(&mut commands, port);
+
+            info!("starting host as {symbol} ");
             let server = MatchboxHost::new(room_url, &replicon_channels)?;
             commands.insert_resource(server);
             commands.spawn((LocalPlayer, symbol));
         }
         Cli::Client { port } => {
+            let room_url = format!("ws://localhost:{port}/tic-tac-toe");
             info!("connecting to port {port}");
             let client = MatchboxClient::new(room_url, &replicon_channels)?;
             commands.insert_resource(client);
@@ -114,6 +123,27 @@ fn read_cli(mut commands: Commands, cli: Res<Cli>, replicon_channels: Res<Replic
     }
 
     Ok(())
+}
+
+fn start_signaling_server(commands: &mut Commands, port: u16) {
+    info!("Starting signaling server on port {port}");
+    let addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+    let signaling_server = bevy_matchbox::MatchboxServer::from(
+        SignalingServer::client_server_builder(addr)
+            .on_connection_request(|connection| {
+                info!("Connecting: {connection:?}");
+                Ok(true) // Allow all connections
+            })
+            .on_id_assignment(|(socket, id)| info!("{socket} received {id}"))
+            .on_host_connected(|id| info!("Host joined: {id}"))
+            .on_host_disconnected(|id| info!("Host left: {id}"))
+            .on_client_connected(|id| info!("Client joined: {id}"))
+            .on_client_disconnected(|id| info!("Client left: {id}"))
+            .cors()
+            .trace()
+            .build(),
+    );
+    commands.insert_resource(signaling_server);
 }
 
 fn setup_ui(mut commands: Commands, symbol_font: Res<SymbolFont>) {
@@ -318,7 +348,7 @@ fn client_start(
 ) {
     let mut cells: Vec<_> = cells.iter().collect();
     cells.sort_by_key(|(_, cell)| cell.index);
-
+    info!("**** sending client info");
     commands.client_trigger(ClientInfo {
         protocol: *protocol,
         cells: cells.into_iter().map(|(entity, _)| entity).collect(),
@@ -366,12 +396,12 @@ fn init_client(
     }
 
     // Utilize client entity as a player for convenient lookups by `client_entity`.
-    // commands.entity(trigger.client_entity).insert((
-    //     Player,
-    //     server_symbol.next(),
-    //     AuthorizedClient,
-    //     entity_map,
-    // ));
+    commands.entity(trigger.client_entity).insert((
+        Player,
+        server_symbol.next(),
+        AuthorizedClient,
+        entity_map,
+    ));
 
     commands.server_trigger_targets(
         ToClients {

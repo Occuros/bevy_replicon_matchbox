@@ -2,13 +2,14 @@
 //! Also demonstrates the single-player and how sever also could be a player.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
-
+use std::net::{Ipv4Addr, SocketAddrV4};
 use bevy::log::{Level, LogPlugin};
 use bevy::{
     color::palettes::css::GREEN,
     prelude::*,
     winit::{UpdateMode::Continuous, WinitSettings},
 };
+use bevy_matchbox::matchbox_signaling::SignalingServer;
 use bevy_replicon::prelude::*;
 use bevy_replicon_matchbox_backend::{MatchboxClient, MatchboxHost, RepliconMatchboxPlugins};
 use clap::Parser;
@@ -50,44 +51,13 @@ fn main() {
         .add_systems(Startup, (read_cli, spawn_camera))
         .add_systems(Update, (read_input, draw_boxes));
 
-
-    // app.add_server_event::<ExampleEvent>(Channel::Ordered)
-    //     .add_systems(
-    //         PreUpdate,
-    //         receive_events
-    //             .after(ClientSet::Receive)
-    //             .run_if(client_connected),
-    //     )
-    //     .add_systems(
-    //         PostUpdate,
-    //         send_events.before(ServerSet::Send).run_if(server_running),
-    //     );
-
-
-
-
         app.run();
-
-    println!("Bevy App has exited. We are back in our main function.");
 }
 
-fn send_events(mut events: EventWriter<ToClients<ExampleEvent>>) {
-    info!("sending event to clients");
-    events.write(ToClients {
-        mode: SendMode::Broadcast,
-        event: ExampleEvent{i: 1},
-    });
-}
 
-fn receive_events(mut events: EventReader<ExampleEvent>) {
-    for event in events.read() {
-        info!("received event {event:?} from server");
-    }
-}
 
 
 fn read_cli(mut commands: Commands, cli: Res<Cli>, channels: Res<RepliconChannels>) -> Result<()> {
-    let room_url = "ws://localhost:3536/hello";
 
     match *cli {
         Cli::SinglePlayer => {
@@ -101,6 +71,9 @@ fn read_cli(mut commands: Commands, cli: Res<Cli>, channels: Res<RepliconChannel
         }
         Cli::Server { port } => {
             info!("starting server at port {port}");
+            start_signaling_server(&mut commands, port);
+            let room_url = format!("ws://localhost:{port}/simple-box");
+
             let server = MatchboxHost::new(room_url, &channels)?;
             commands.insert_resource(server);
             commands.spawn((
@@ -120,6 +93,8 @@ fn read_cli(mut commands: Commands, cli: Res<Cli>, channels: Res<RepliconChannel
         }
         Cli::Client { port } => {
             info!("connecting to port {port}");
+            let room_url = format!("ws://localhost:{port}/simple-box");
+
             let client = MatchboxClient::new(room_url, &channels)?;
             commands.insert_resource(client);
             commands.spawn((
@@ -134,6 +109,27 @@ fn read_cli(mut commands: Commands, cli: Res<Cli>, channels: Res<RepliconChannel
     }
 
     Ok(())
+}
+
+fn start_signaling_server(commands: &mut Commands, port: u16) {
+    info!("Starting signaling server on port {port}");
+    let addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+    let signaling_server = bevy_matchbox::MatchboxServer::from(
+        SignalingServer::client_server_builder(addr)
+            .on_connection_request(|connection| {
+                info!("Connecting: {connection:?}");
+                Ok(true) // Allow all connections
+            })
+            .on_id_assignment(|(socket, id)| info!("{socket} received {id}"))
+            .on_host_connected(|id| info!("Host joined: {id}"))
+            .on_host_disconnected(|id| info!("Host left: {id}"))
+            .on_client_connected(|id| info!("Client joined: {id}"))
+            .on_client_disconnected(|id| info!("Client left: {id}"))
+            .cors()
+            .trace()
+            .build(),
+    );
+    commands.insert_resource(signaling_server);
 }
 
 fn spawn_camera(mut commands: Commands) {

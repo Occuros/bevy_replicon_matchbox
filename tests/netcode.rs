@@ -4,13 +4,19 @@ use bevy_replicon::prelude::*;
 use bevy_replicon_matchbox_backend::*;
 use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, SocketAddrV4};
+use std::sync::atomic::{AtomicU16, Ordering};
 use test_log::test;
 
+///run the tests with cargo test -- --test-threads=1
 
-
+static PORT_COUNTER: AtomicU16 = AtomicU16::new(30000);
+fn next_test_port() -> u16 {
+    PORT_COUNTER.fetch_add(1, Ordering::AcqRel)
+}
 
 #[test]
 fn connect_disconnect() {
+    let port = next_test_port();
     let mut server_app = App::new();
     let mut client_app = App::new();
     for app in [&mut server_app, &mut client_app] {
@@ -25,7 +31,7 @@ fn connect_disconnect() {
         .finish();
     }
 
-    setup(&mut server_app, &mut client_app);
+    setup(&mut server_app, &mut client_app, port);
     assert!(server_app.world().resource::<RepliconServer>().is_running());
 
     let matchbox_server = server_app.world().resource::<MatchboxHost>();
@@ -68,6 +74,8 @@ fn connect_disconnect() {
 
 #[test]
 fn disconnect_request() {
+    let port = next_test_port();
+
     let mut server_app = App::new();
     let mut client_app = App::new();
 
@@ -93,7 +101,7 @@ fn disconnect_request() {
         .finish();
     }
 
-    setup(&mut server_app, &mut client_app);
+    setup(&mut server_app, &mut client_app, port);
 
     server_app
         .world_mut()
@@ -152,6 +160,8 @@ fn disconnect_request() {
 
 #[test]
 fn replication_test() {
+    let port = next_test_port();
+
     let mut server_app = App::new();
     let mut client_app = App::new();
 
@@ -169,7 +179,7 @@ fn replication_test() {
         .finish();
     }
 
-    setup(&mut server_app, &mut client_app);
+    setup(&mut server_app, &mut client_app, port);
 
     let mut clients = server_app
         .world_mut()
@@ -200,6 +210,8 @@ fn replication_test() {
 
 #[test]
 fn server_stop() {
+    let port = next_test_port();
+
     let mut server_app = App::new();
     let mut client_app = App::new();
     for app in [&mut server_app, &mut client_app] {
@@ -215,7 +227,7 @@ fn server_stop() {
             .finish();
     }
 
-    setup(&mut server_app, &mut client_app);
+    setup(&mut server_app, &mut client_app, port);
     let mut server = server_app.world_mut().resource_mut::<MatchboxHost>();
     server.disconnect_all();
 
@@ -267,6 +279,7 @@ fn server_stop() {
 
 #[test]
 fn replication() {
+    let port = next_test_port();
     let mut server_app = App::new();
     let mut client_app = App::new();
     for app in [&mut server_app, &mut client_app] {
@@ -281,7 +294,7 @@ fn replication() {
             .finish();
     }
 
-    setup(&mut server_app, &mut client_app);
+    setup(&mut server_app, &mut client_app, port);
 
 
     server_app.world_mut().spawn(Replicated);
@@ -297,6 +310,7 @@ fn replication() {
 
 #[test]
 fn server_event() {
+    let port = next_test_port();
     let mut server_app = App::new();
     let mut client_app = App::new();
     for app in [&mut server_app, &mut client_app] {
@@ -312,7 +326,7 @@ fn server_event() {
             .finish();
     }
 
-    setup(&mut server_app, &mut client_app);
+    setup(&mut server_app, &mut client_app, port);
 
     server_app.world_mut().send_event(ToClients {
         mode: SendMode::Broadcast,
@@ -330,6 +344,8 @@ fn server_event() {
 
 #[test]
 fn client_event() {
+    let port = next_test_port();
+
     let mut server_app = App::new();
     let mut client_app = App::new();
     for app in [&mut server_app, &mut client_app] {
@@ -345,7 +361,7 @@ fn client_event() {
             .finish();
     }
 
-    setup(&mut server_app, &mut client_app);
+    setup(&mut server_app, &mut client_app, port);
 
     client_app.world_mut().send_event(TestEvent);
 
@@ -366,18 +382,18 @@ const DEFAULT_ROOM: &str = "ws://localhost:7777/TestRoom";
 #[cfg(test)]
 const DEFAULT_PORT: u16 = 7777;
 
-fn setup(server_app: &mut App, client_app: &mut App) {
-    start_signaling_server(server_app);
-    setup_server(server_app);
-    setup_client(client_app);
+fn setup(server_app: &mut App, client_app: &mut App, port: u16) {
+    start_signaling_server(server_app, port);
+    setup_server(server_app, port);
+    setup_client(client_app, port);
     wait_for_connection(server_app, client_app);
 }
 
 use bevy_matchbox::matchbox_signaling::SignalingServer;
 
-fn start_signaling_server(server_app: &mut App) {
+fn start_signaling_server(server_app: &mut App, port: u16) {
     info!("Starting signaling server");
-    let addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, DEFAULT_PORT);
+    let addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
     let signaling_server = bevy_matchbox::MatchboxServer::from(
         SignalingServer::client_server_builder(addr)
             .on_connection_request(|connection| {
@@ -396,17 +412,19 @@ fn start_signaling_server(server_app: &mut App) {
     server_app.insert_resource(signaling_server);
 }
 
-fn setup_server(app: &mut App) {
+fn setup_server(app: &mut App, port: u16) {
+    let room_url = format!("ws://localhost:{port}/TestRoom");
     let channels = app.world().resource::<RepliconChannels>();
 
-    let server = MatchboxHost::new(DEFAULT_ROOM, channels).unwrap();
+    let server = MatchboxHost::new(room_url, channels).unwrap();
 
     app.insert_resource(server);
 }
 
-fn setup_client(app: &mut App) {
+fn setup_client(app: &mut App, port: u16) {
+    let room_url = format!("ws://localhost:{port}/TestRoom");
     let channels = app.world().resource::<RepliconChannels>();
-    let client = MatchboxClient::new(DEFAULT_ROOM, channels).unwrap();
+    let client = MatchboxClient::new(room_url, channels).unwrap();
     app.insert_resource(client);
 }
 

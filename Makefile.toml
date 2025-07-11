@@ -1,0 +1,56 @@
+[tasks.fmt]
+command = "cargo"
+args = ["fmt", "--all", "--check"]
+
+[tasks.clippy]
+command = "cargo"
+args = ["clippy", "--all-targets", "--all-features", "--", "-D", "warnings"]
+
+[tasks.test]
+command = "cargo"
+#env = { RUST_LOG = "bevy_replicon=trace,bevy_replicon_matchbox=trace" }
+env = { RUST_LOG = "bevy_replicon=warn,bevy_replicon_matchbox=warn" }
+args = ["test", "--", "--nocapture", "--test-threads=1"]
+
+[tasks.taplo]
+command = "taplo"
+args = ["fmt", "--check"]
+
+[tasks.typos]
+command = "typos"
+args = ["."]
+
+[tasks.doctest]
+command = "cargo"
+args = ["test", "--doc"]
+
+[tasks.feature-combinations]
+command = "cargo"
+args = ["hack", "check", "--feature-powerset"]
+env = { RUSTFLAGS = "-Aunused -Dwarnings" }
+
+[tasks.coverage]
+command = "cargo"
+args = [
+  "tarpaulin",
+  "--engine",
+  "llvm",
+  "--out",
+  "lcov",
+  "--",
+  "--test-threads=1",
+]
+
+[tasks.check-all]
+description = "Run all CI-like checks locally"
+clear = true
+dependencies = [
+  "fmt",
+  "taplo",
+  "clippy",
+  "typos",
+  "doctest",
+  "feature-combinations",
+  "test",
+  # Optional: "coverage"
+]

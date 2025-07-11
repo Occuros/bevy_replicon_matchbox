@@ -12,7 +12,8 @@ pub(super) const SYSTEM_CHANNEL_ID: usize = 0;
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub(super) enum SystemChannelMessage {
     ConnectedToHost,
-    Disconnect,
+    HostRequestsDisconnect,
+    ClientDisconnects,
 }
 
 pub struct RepliconMatchboxPlugins;
@@ -99,13 +100,11 @@ pub(super) fn strip_marker(packet: &[u8]) -> Bytes {
     Bytes::copy_from_slice(&packet[1..])
 }
 
-#[cfg(feature = "server")]
 pub(super) fn to_packet<'a, T: Serialize>(msg: &T, buf: &'a mut [u8]) -> &'a [u8] {
     use bevy_replicon::postcard::to_slice;
     to_slice(msg, buf).expect("serialize failed")
 }
 
-#[cfg(feature = "client")]
 pub(super) fn from_packet<'a, T: Deserialize<'a>>(
     data: &'a [u8],
 ) -> bevy::prelude::Result<T, postcard::Error> {
@@ -116,7 +115,7 @@ pub(super) fn from_packet<'a, T: Deserialize<'a>>(
 fn test_packaging() {
     let messages = [
         SystemChannelMessage::ConnectedToHost,
-        SystemChannelMessage::Disconnect,
+        SystemChannelMessage::HostRequestsDisconnect,
     ];
     for msg in messages.iter() {
         let mut buf = [0u8; 1];

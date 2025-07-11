@@ -121,28 +121,3 @@ jobs:
       - name: Test
         run: cargo tarpaulin --engine llvm --out lcov -- --test-threads=1
 
-      - name: Upload code coverage results
-        if: github.actor != 'dependabot[bot]'
-        uses: actions/upload-artifact@v4
-        with:
-          name: code-coverage-report
-          path: lcov.info
-
-  codecov:
-    name: Upload to Codecov
-    if: github.actor != 'dependabot[bot]'
-    needs: [typos, format, lint, doctest, feature-combinations, test]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone repo
-        uses: actions/checkout@v4
-
-      - name: Download code coverage results
-        uses: actions/download-artifact@v4
-        with:
-          name: code-coverage-report
-
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}

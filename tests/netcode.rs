@@ -65,10 +65,7 @@ fn connect_disconnect() {
     //upading again to be sure the socket is flushed
     client_app.update();
     server_app.update();
-    client_app.update();
-    server_app.update();
-    client_app.update();
-    server_app.update();
+
     assert_eq!(clients.iter(server_app.world()).len(), 0);
 
     let matchbox_server = server_app.world().resource::<MatchboxHost>();

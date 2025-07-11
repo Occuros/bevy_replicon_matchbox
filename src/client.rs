@@ -66,7 +66,6 @@ fn update_peers(mut client: ResMut<MatchboxClient>, mut commands: Commands) {
 }
 
 fn receive_system_channel_packets(
-    mut commands: Commands,
     mut client: ResMut<MatchboxClient>,
     mut replicon_client: ResMut<RepliconClient>,
 ) {
@@ -93,9 +92,13 @@ fn receive_system_channel_packets(
                 client.host_peer_id = Some(peer_id);
                 replicon_client.set_status(RepliconClientStatus::Connected);
             }
-            SystemChannelMessage::Disconnect => {
+            SystemChannelMessage::HostRequestsDisconnect => {
                 info!("disconnected by server");
-                commands.remove_resource::<MatchboxClient>();
+                client.should_disconnect = true;
+            }
+
+            SystemChannelMessage::ClientDisconnects => {
+                error!("Unexpected message received from host");
             }
         }
     }
@@ -151,12 +154,20 @@ fn send_packets(
             .channel_mut(socket_channel_id)
             .send(add_marker(message.as_ref()), host_peer_id);
     }
+
+    if client.should_disconnect {
+        client.socket.close();
+        client.host_peer_id = None;
+        client.should_disconnect = false;
+        replicon_client.set_status(RepliconClientStatus::Disconnected);
+    }
 }
 
 #[derive(Resource)]
 pub struct MatchboxClient {
     pub socket: MatchboxSocket,
     pub host_peer_id: Option<PeerId>,
+    should_disconnect: bool,
 }
 
 impl MatchboxClient {
@@ -168,6 +179,7 @@ impl MatchboxClient {
         Ok(Self {
             socket,
             host_peer_id: None,
+            should_disconnect: false,
         })
     }
 
@@ -176,7 +188,16 @@ impl MatchboxClient {
     }
 
     pub fn disconnect(&mut self) {
-        self.socket.close();
-        self.host_peer_id = None;
+        let Ok(channel) = self.socket.get_channel_mut(SYSTEM_CHANNEL_ID) else {
+            return;
+        };
+        let Some(host_peer) = self.host_peer_id else {
+            return;
+        };
+        trace!("sending disconnect message to host");
+        let mut buf = [0u8; 1];
+        let package = to_packet(&SystemChannelMessage::ClientDisconnects, &mut buf).into();
+        channel.send(package, host_peer);
+        self.should_disconnect = true;
     }
 }

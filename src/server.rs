@@ -2,12 +2,11 @@ use crate::shared::*;
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::io;
 use bevy_matchbox::MatchboxSocket;
+use bevy_matchbox::matchbox_socket::Packet;
 use bevy_matchbox::prelude::{PeerId, PeerState};
 use bevy_replicon::prelude::*;
 use bevy_replicon::shared::backend::connected_client::NetworkId;
 use std::collections::HashMap;
-
-use bevy_matchbox::matchbox_socket::Packet;
 
 pub struct RepliconMatchboxServerPlugin;
 
@@ -17,6 +16,7 @@ impl Plugin for RepliconMatchboxServerPlugin {
             PreUpdate,
             (
                 set_running.run_if(resource_added::<MatchboxHost>),
+                receive_system_channel_packets.run_if(resource_exists::<MatchboxHost>),
                 receive_packets.run_if(resource_exists::<MatchboxHost>),
                 received_disconnect.run_if(resource_exists::<MatchboxHost>),
             )
@@ -98,6 +98,41 @@ fn update_client_presence(mut commands: Commands, mut server: ResMut<MatchboxHos
         }
     }
 }
+
+fn receive_system_channel_packets(mut commands: Commands, mut server: ResMut<MatchboxHost>) {
+    if server.socket.all_channels_closed() {
+        trace!("matchbox socket was closed");
+        return;
+    }
+    let Ok(channel) = server.socket.get_channel_mut(SYSTEM_CHANNEL_ID) else {
+        error!("system channel not found!");
+        return;
+    };
+    for (peer_id, packet) in channel.receive() {
+        let Ok(message) = from_packet(&packet) else {
+            error!("failed to deserialize system message {}", packet.len());
+            continue;
+        };
+        trace!(
+            "client received system message {:?} from peer {}",
+            message, peer_id
+        );
+
+        match message {
+            SystemChannelMessage::ClientDisconnects => {
+                let Some(client_entity) = server.client_entities.remove(&peer_id) else {
+                    continue;
+                };
+                trace!("client disconnected {peer_id}: {client_entity}");
+                commands.entity(client_entity).despawn();
+            }
+            _ => {
+                error!("Unexpected message {message:?} received from client {peer_id}");
+            }
+        }
+    }
+}
+
 fn receive_packets(
     mut replicon_server: ResMut<RepliconServer>,
     mut server: ResMut<MatchboxHost>,
@@ -107,7 +142,7 @@ fn receive_packets(
         let socket_channel_id = 1 + channels.server_channels().len() + channel_id;
         for (id, packet) in server.socket.channel_mut(socket_channel_id).receive() {
             let Some(client_entity) = server.client_entities.get(&id) else {
-                error!("received packet from unknown client {}", id);
+                trace!("received packet from unknown client {}", id);
                 continue;
             };
             replicon_server.insert_received(*client_entity, channel_id, strip_marker(&packet));
@@ -149,7 +184,8 @@ fn send_packets(
             continue;
         };
         let mut buf = [0u8; 1];
-        let packet: Packet = to_packet(&SystemChannelMessage::Disconnect, &mut buf).into();
+        let packet: Packet =
+            to_packet(&SystemChannelMessage::HostRequestsDisconnect, &mut buf).into();
         server
             .socket
             .channel_mut(SYSTEM_CHANNEL_ID)

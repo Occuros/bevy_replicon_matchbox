@@ -38,9 +38,9 @@ For production setups, it’s recommended to use a dedicated matchbox signaling 
 
 ## Compatible versions
 
-| bevy | bevy_matchbox | bevy_replicon | bevy_replicon_renet |
-|------|---------------|---------------|---------------------|
-| 0.16 | 0.12          | 0.34          | 0.16                |
+| bevy | bevy_matchbox | bevy_replicon | bevy_replicon_matchbox |
+|------|---------------|---------------|------------------------|
+| 0.16 | 0.12          | 0.34          | 0.16                   |
 
 
 ## License

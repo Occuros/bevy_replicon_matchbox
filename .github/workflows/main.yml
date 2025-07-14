@@ -99,6 +99,29 @@ jobs:
         env:
           RUSTFLAGS: -Aunused -Dwarnings
 
+  wasi:
+    name: WASI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+
+      - name: Instal stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - name: Cache crates
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Wasmtime
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+
+      - name: Test
+        run: cargo test --target wasm32-wasip1
+        env:
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -112,12 +135,6 @@ jobs:
       - name: Cache crates
         uses: Swatinem/rust-cache@v2
 
-      - name: Install LLVM tools
-        run: rustup component add llvm-tools-preview
-
-      - name: Install Tarpaulin
-        run: cargo install cargo-tarpaulin
-
-      - name: Test
-        run: cargo tarpaulin --engine llvm --out lcov -- --test-threads=1
+      - name: Run tests
+        run: cargo test --all --locked
 

@@ -15,7 +15,7 @@ allow = [
 
 
 [bans]
-skip-tree = ["bevy"]
+skip-tree = ["bevy", "bevy_matchbox"]
 
 [advisories]
 ignore = ["RUSTSEC-2024-0436"]

@@ -46,3 +46,17 @@ clap = { version = "4.1", features = ["derive"] }
 default = ["client", "server"]
 server = ["bevy_replicon/server"]
 client = ["bevy_replicon/client"]
+signaling = ["bevy_matchbox/signaling"]
+
+
+[[test]]
+name = "backend"
+required-features = ["server", "client"]
+
+[[example]]
+name = "simple_box"
+required-features = ["server", "client"]
+
+[[example]]
+name = "tic_tac_toe"
+required-features = ["server", "client"]
